@@ -7,7 +7,7 @@ break them casually.
 
 **1. Standard library only. No dependencies, ever.**
 No `pip install`, no `requirements.txt`, no `pyproject.toml`/`setup.py` that
-implies an install step. `git clone` + `python3 evalctl.py` must remain the
+implies an install step. `git clone` + `python3 evalbench.py` must remain the
 primary way to run this. The reason is not minimalism for its own sake: this
 tool is meant to run on locked-down EDA workstations with stock Python where
 you often cannot install anything.
@@ -26,7 +26,7 @@ Same reason. Concretely:
 No telemetry, no analytics, no update checks, no phoning home. Users point
 this at proprietary RTL; the guarantee that nothing leaves the machine is a
 feature, not an accident. The only outbound anything is the LLM/agent the
-user was already running, which evalharness never invokes itself.
+user was already running, which Semiflow EvalBench never invokes itself.
 
 **4. Ship no third-party data.**
 No NVIDIA CVDP dataset files. No SiliconCrew source. The tool reads paths the
@@ -41,18 +41,18 @@ the shell. Don't add per-tool special cases to the core.
 ## Before you open a PR
 
 ```bash
-python3 -c "import ast; ast.parse(open('evalctl.py').read())"
+python3 -c "import ast; ast.parse(open('evalbench.py').read())"
 python3 -c "import ast; ast.parse(open('mcp_server.py').read())"
-python3 evalctl.py --help
+python3 evalbench.py --help
 ```
 
 And ideally exercise the real path in a scratch git repo:
 
 ```bash
 mkdir /tmp/eh-demo && cd /tmp/eh-demo && git init && git commit --allow-empty -m init
-python3 /path/to/evalharness/evalctl.py init --success-command "true" \
+python3 /path/to/Semiflow EvalBench/evalbench.py init --success-command "true" \
   --context-globs "" --model test --tools ""
-python3 /path/to/evalharness/evalctl.py score
+python3 /path/to/Semiflow EvalBench/evalbench.py score
 ```
 
 For the MCP server, `mcp_test_client.py` drives it end to end without an agent
@@ -64,6 +64,6 @@ python3 mcp_test_client.py /path/to/some/repo
 
 ## Data compatibility
 
-Records in `.evalharness/` are long-lived - people accumulate them over weeks.
-If you change the eval schema, extend `migrate_eval()` in `evalctl.py` so old
+Records in `.evalbench/` are long-lived - people accumulate them over weeks.
+If you change the eval schema, extend `migrate_eval()` in `evalbench.py` so old
 records keep loading instead of writing a migration script.

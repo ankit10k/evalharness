@@ -77,7 +77,7 @@ def main() -> None:
 
     while True:
         try:
-            line = input("evalharness> ").strip()
+            line = input("evalbench> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not line:

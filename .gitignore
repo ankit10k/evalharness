@@ -1,5 +1,5 @@
-# evalharness state - always local, never committed
-.evalharness/
+# Semiflow EvalBench state - always local, never committed
+.evalbench/
 
 # Local MCP config generated from .mcp.json.template (contains machine paths)
 .mcp.json

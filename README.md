@@ -1,4 +1,4 @@
-# evalharness
+# Semiflow EvalBench
 
 **Measure whether your AI coding setup is actually getting better.**
 
@@ -14,11 +14,12 @@ Everything stays on your machine.
 - [What is this?](#what-is-this)
 - [Why you need it](#why-you-need-it)
 - [How it works](#how-it-works)
-- [Setup](#setup)
-- [Quick start](#quick-start)
+- [**Two ways to use it**](#two-ways-to-use-it)
+- [Requirements](#requirements)
+- [**Option A: With your coding agent (MCP)**](#option-a-with-your-coding-agent-mcp) - recommended
+- [**Option B: Command line**](#option-b-command-line)
 - [The dashboard](#the-dashboard)
 - [Command reference](#command-reference)
-- [Using it with a coding agent (MCP)](#using-it-with-a-coding-agent-mcp)
 - [CVDP benchmark support](#cvdp-benchmark-support)
 - [SiliconCrew integration](#siliconcrew-integration)
 - [FAQ](#faq)
@@ -39,7 +40,7 @@ You add a document explaining your codebase conventions. Does the agent
 actually produce better code now? You switch models. Better or worse? You
 connect a new tool. Did that move the needle, or just add noise?
 
-Most people answer this with vibes. evalharness answers it with a number.
+Most people answer this with vibes. Semiflow EvalBench answers it with a number.
 
 It works in two steps:
 
@@ -65,17 +66,17 @@ A change that seems minor may help a lot. You cannot tell without evidence.
 
 **Your data never leaves your machine.** If you work on proprietary RTL, source
 code, or anything under NDA, you cannot upload it to a benchmarking service.
-evalharness runs entirely locally, makes zero network calls, and stores
-everything in a `.evalharness/` folder inside your own repo.
+Semiflow EvalBench runs entirely locally, makes zero network calls, and stores
+everything in a `.evalbench/` folder inside your own repo.
 
-**It works with any toolchain.** evalharness has no idea what a simulator is.
+**It works with any toolchain.** Semiflow EvalBench has no idea what a simulator is.
 You give it a shell command that proves your work is correct. That can be
 `make test`, `pytest`, `iverilog ... && vvp ...`, Verilator, a Synopsys or
 Cadence flow script, or anything else. If it exits `0`, it passed.
 
 **It catches overfitting.** Tune your context files enough and you will make
 them fit your own repo's quirks rather than making the agent genuinely better.
-evalharness tracks your own evals and public benchmark problems as two separate
+Semiflow EvalBench tracks your own evals and public benchmark problems as two separate
 scores, so you can see when one improves while the other does not.
 
 ---
@@ -87,7 +88,7 @@ scores, so you can see when one improves while the other does not.
 There are two very different things you can measure. Confusing them is the
 main way people fool themselves.
 
-**Regression** (`evalctl replay`)
+**Regression** (`evalbench replay`)
 
 Re-runs an eval's success command against your **current** code, where the fix
 already exists.
@@ -96,7 +97,7 @@ This tells you the repo still works. It says nothing about your harness.
 Editing `CLAUDE.md` cannot change the outcome, because the code is already
 fixed. Useful for catching breakage. Useless for measuring your setup.
 
-**Attempt** (`evalctl attempt` then `evalctl grade`)
+**Attempt** (`evalbench attempt` then `evalbench grade`)
 
 Checks out the **original, pre-fix** code into an isolated workspace, hands
 your agent the task, lets it solve the problem from scratch, then runs the
@@ -107,7 +108,7 @@ This is the measurement that actually moves when your harness changes.
 > **Rule of thumb:** "Is my repo healthy?" use `replay`. "Is my setup getting
 > better?" use `attempt` and `grade`.
 
-evalharness never calls an AI model itself. It prepares the workspace and
+Semiflow EvalBench never calls an AI model itself. It prepares the workspace and
 grades the outcome. Your agent does the work in between.
 
 ### Two numbers: score and consistency
@@ -133,7 +134,7 @@ gets detected even if you forget to record it.
 You can also give versions readable names:
 
 ```bash
-evalctl harness v2 "added cache-debug skill doc"
+evalbench harness v2 "added cache-debug skill doc"
 ```
 
 That turns your trend chart into `v1 -> v2 -> v3` instead of a row of opaque
@@ -141,9 +142,27 @@ hashes.
 
 ---
 
-## Setup
+## Two ways to use it
 
-### Requirements
+Semiflow EvalBench works in two modes. They share the same data, the same
+`.evalbench/` folder, and the same scores, so you can mix them freely.
+
+| | **Option A: With your agent (MCP)** | **Option B: Command line** |
+|---|---|---|
+| Setup | Drop in one config file | Clone, optionally add an alias |
+| Who runs it | Your agent, on its own | You, by typing commands |
+| Best for | Everyday use, hands off | Scripting, CI, agents without MCP |
+| You must remember | Nothing | To run `check` after each task |
+
+**Start with Option A if your agent supports MCP.** That covers Claude Code,
+Cursor, and most modern coding agents. The agent captures your work and reports
+scores without you having to remember anything, which is the entire point of
+the tool. Option B is there when you want direct control, are scripting, or
+your agent does not speak MCP.
+
+---
+
+## Requirements
 
 - **Python 3.9 or newer** (standard library only, nothing to install)
 - **git**
@@ -152,34 +171,133 @@ hashes.
 Docker is not required. It appears only in the optional CVDP grading path
 described later.
 
-### Install
-
 ```bash
-git clone https://github.com/ankit10k/evalharness.git
+git clone https://github.com/ankit10k/semiflow-evalbench.git
 ```
 
 That is the whole installation. There is no build step and no package to
 install.
 
-Optionally, add a shortcut so you can type `evalctl` anywhere:
+---
 
-```bash
-echo "alias evalctl='python3 /absolute/path/to/evalharness/evalctl.py'" >> ~/.zshrc
-source ~/.zshrc
+## Option A: With your coding agent (MCP)
+
+**Recommended.** Your agent drives the tool, so evals get captured as a natural
+part of finishing work rather than as a chore you have to remember.
+
+### 1. Add the config
+
+Copy `.mcp.json.template` from this repository into the root of the project you
+want to track, rename it to `.mcp.json`, and fill in the two absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "semiflow-evalbench": {
+      "command": "python3",
+      "args": ["/absolute/path/to/semiflow-evalbench/mcp_server.py"],
+      "env": {
+        "EVALBENCH_REPO": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}
 ```
 
-Use `~/.bashrc` instead if you use bash. The rest of this guide assumes the
-alias exists.
+### 2. Restart your agent session
+
+MCP servers load at session start, so a session that is already running will
+not pick up the change.
+
+To confirm it connected in Claude Code, run `/mcp` and look for
+`semiflow-evalbench`.
+
+### 3. Just work
+
+Ask your agent to do something real and let it verify the work as usual. From
+there it handles the rest:
+
+- After your tests pass, it calls `check` on its own
+- It tells you what changed and asks whether to keep it as an eval
+- It records your answer, updates the score, and gives you a dashboard link
+
+A typical exchange:
+
+```
+You:   Fix the FIFO overflow when depth is 1.
+
+Agent: Fixed it in rtl/fifo.sv and make test passes.
+
+       [*_*] EvalScout: nice, that is real work - Fix FIFO overflow
+       (rtl/fifo.sv). Logged as eval_a1b2c3d4. Want to keep it as a
+       quality check going forward?
+
+You:   Yes, tag it fifo.
+
+Agent: Locked in. Tracking 6 evals now. Board: file:///.../dashboard.html
+```
+
+The first time in a repo, the agent asks for your success command, context
+globs, model, and tools, then sets everything up.
+
+### 4. Ask it things in plain language
+
+No commands to memorise:
+
+- *"How is our eval score looking?"*
+- *"Re-run the evals and see if that skill doc helped"*
+- *"I changed CLAUDE.md, call this harness v3"*
+- *"Try eval_a1b2c3d4 from scratch and see if you can still solve it"*
+
+### Available tools
+
+Thirteen MCP tools: `check`, `decide`, `start_attempt`, `grade_attempt`,
+`set_harness`, `replay`, `score`, `list_pending`, `get_eval`, `import_cvdp`,
+`import_baseline`, `feedback`, and `init`.
+
+This works with any MCP-capable agent, not only Claude Code. Cursor and others
+use the same `mcpServers` configuration shape.
+
+### Customising the persona
+
+Add these to the `env` block of your `.mcp.json`:
+
+```json
+"EVALBENCH_PET_NAME": "Scout",
+"EVALBENCH_PET_ICON": "(o_o)"
+```
+
+### Testing the server without an agent
+
+```bash
+python3 mcp_test_client.py /path/to/your/project
+```
+
+An interactive prompt where you can run `score`, `list`, `check <cmd>`,
+`get <eval_id>`, or `raw <tool> <json>` straight against the server. Useful for
+confirming things work before wiring up an agent.
 
 ---
 
-## Quick start
+## Option B: Command line
+
+Use this when you want direct control, are scripting something, or your agent
+does not support MCP. Everything Option A does is available here as a command.
+
+Optionally add a shortcut so you can type `evalbench` anywhere:
+
+```bash
+echo "alias evalbench='python3 /absolute/path/to/semiflow-evalbench/evalbench.py'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+Use `~/.bashrc` if you use bash. The rest of this section assumes the alias.
 
 ### Step 1: Initialize inside the repo you work in
 
 ```bash
 cd /path/to/your/project
-evalctl init
+evalbench init
 ```
 
 It asks four questions:
@@ -191,13 +309,13 @@ It asks four questions:
 | Model | Which model you use | `claude-sonnet-5` |
 | Tools | MCP servers or tools available to your agent | `rtl-codex` |
 
-This creates `.evalharness/config.json` and adds `.evalharness/` to your
+This creates `.evalbench/config.json` and adds `.evalbench/` to your
 `.gitignore`.
 
 ### Step 2: Do real work
 
 Fix a bug. Add a feature. Write a testbench. Whatever you were going to do
-anyway. No change to your workflow.
+anyway.
 
 ### Step 3: Capture it
 
@@ -205,11 +323,10 @@ When you would normally run your test to confirm the work, run it through
 `check` instead:
 
 ```bash
-evalctl check "make test" --prompt "Fix the FIFO overflow when depth is 1"
+evalbench check "make test" --prompt "Fix the FIFO overflow when depth is 1"
 ```
 
-`check` runs your command, notices you changed real code, and proposes an eval.
-It shows you a summary and asks what to do:
+`check` runs your command, notices you changed real code, and proposes an eval:
 
 ```
 eval_a1b2c3d4  [rtl]  Fix FIFO overflow (rtl/fifo.sv)
@@ -229,16 +346,15 @@ Press `a` to keep it.
 Pick an eval and make your agent redo it from scratch:
 
 ```bash
-evalctl attempt eval_a1b2c3d4
+evalbench attempt eval_a1b2c3d4
 ```
 
 This prints an isolated workspace path and the task. The workspace contains
-your code **before** the fix.
-
-Let your agent solve the task in that workspace. Then grade it:
+your code **before** the fix. Let your agent solve the task in that workspace,
+then grade it:
 
 ```bash
-evalctl grade att_5e6f7a8b
+evalbench grade att_5e6f7a8b
 ```
 
 You get `PASS` or `FAIL`. Repeat a few times on the same eval to build a
@@ -250,13 +366,13 @@ Edit your `CLAUDE.md`, add a skill document, or switch models. Record the new
 version:
 
 ```bash
-evalctl harness v2 "added RTL debugging guide"
+evalbench harness v2 "added RTL debugging guide"
 ```
 
-Run your attempts again. Now compare:
+Run your attempts again, then compare:
 
 ```bash
-evalctl score
+evalbench score
 ```
 
 ```
@@ -269,14 +385,13 @@ Harness: v2 - added RTL debugging guide  (a5f11bcfac5a)
 That difference between v1 and v2 is the thing you could not see before.
 
 ---
-
 ## The dashboard
 
 ```bash
-evalctl dashboard
+evalbench dashboard
 ```
 
-This writes `.evalharness/dashboard.html` and opens it in your browser. It is a
+This writes `.evalbench/dashboard.html` and opens it in your browser. It is a
 single static file. There is no server and no network request.
 
 What you get:
@@ -304,97 +419,34 @@ or check the score, so it never goes stale.
 
 | Command | What it does |
 |---|---|
-| `evalctl init` | One-time setup in a repo |
-| `evalctl check "<cmd>" --prompt "<task>"` | Run your test, capture the work as an eval |
-| `evalctl attempt <eval_id>` | Open a pre-fix workspace for your agent to solve |
-| `evalctl grade <attempt_id>` | Grade a finished attempt |
-| `evalctl harness <version> "<note>"` | Name your current harness version |
-| `evalctl score` | Print score and consistency per suite |
-| `evalctl dashboard` | Build and open the visual dashboard |
+| `evalbench init` | One-time setup in a repo |
+| `evalbench check "<cmd>" --prompt "<task>"` | Run your test, capture the work as an eval |
+| `evalbench attempt <eval_id>` | Open a pre-fix workspace for your agent to solve |
+| `evalbench grade <attempt_id>` | Grade a finished attempt |
+| `evalbench harness <version> "<note>"` | Name your current harness version |
+| `evalbench score` | Print score and consistency per suite |
+| `evalbench dashboard` | Build and open the visual dashboard |
 
 ### Occasional commands
 
 | Command | What it does |
 |---|---|
-| `evalctl replay` | Re-run all evals against current code (repo health only) |
-| `evalctl ask "<question>"` | Local Q and A over your data: `score`, `failing`, `trend`, `tags` |
-| `evalctl feedback "<text>"` | Log a note about the tool itself |
-| `evalctl import-cvdp --dataset <path>` | Import CVDP benchmark problems |
-| `evalctl import-baseline --manifest <path>` | Import already-graded reference verdicts |
+| `evalbench replay` | Re-run all evals against current code (repo health only) |
+| `evalbench ask "<question>"` | Local Q and A over your data: `score`, `failing`, `trend`, `tags` |
+| `evalbench feedback "<text>"` | Log a note about the tool itself |
+| `evalbench import-cvdp --dataset <path>` | Import CVDP benchmark problems |
+| `evalbench import-baseline --manifest <path>` | Import already-graded reference verdicts |
 
 ### Advanced commands
 
 | Command | What it does |
 |---|---|
-| `evalctl wrap "<cmd>"` | Capture a command without proposing an eval |
-| `evalctl propose` | Turn the last capture into a draft eval |
-| `evalctl review` | Review pending evals one by one |
-| `evalctl run <eval_id>` | Re-run one eval against current code |
+| `evalbench wrap "<cmd>"` | Capture a command without proposing an eval |
+| `evalbench propose` | Turn the last capture into a draft eval |
+| `evalbench review` | Review pending evals one by one |
+| `evalbench run <eval_id>` | Re-run one eval against current code |
 
 Add `--help` to any command for its full options.
-
----
-
-## Using it with a coding agent (MCP)
-
-evalharness ships an MCP server, so your agent can drive it directly and remind
-you to capture work without you having to remember.
-
-### Setup
-
-Copy `.mcp.json.template` from this repository into the root of the project you
-want to track, rename it to `.mcp.json`, and fill in the two absolute paths:
-
-```json
-{
-  "mcpServers": {
-    "evalharness": {
-      "command": "python3",
-      "args": ["/absolute/path/to/evalharness/mcp_server.py"],
-      "env": {
-        "EVALHARNESS_REPO": "/absolute/path/to/your/project"
-      }
-    }
-  }
-}
-```
-
-Restart your agent session. MCP servers load at session start, so a running
-session will not pick up the change.
-
-This works with any MCP-capable agent, not only Claude Code. Cursor and others
-use the same `mcpServers` configuration shape.
-
-### What the agent can do
-
-Thirteen tools are available: `check`, `decide`, `start_attempt`,
-`grade_attempt`, `set_harness`, `replay`, `score`, `list_pending`, `get_eval`,
-`import_cvdp`, `import_baseline`, `feedback`, and `init`.
-
-The server tells your agent to call `check` on its own after it verifies real
-work, so eval capture happens without you asking. Every response includes a
-short line from `[•_•] EvalScout` that your agent relays to you in plain
-language.
-
-### Testing the server without an agent
-
-```bash
-python3 mcp_test_client.py /path/to/your/project
-```
-
-This gives you an interactive prompt where you can run `score`, `list`, `check
-<cmd>`, `get <eval_id>`, or `raw <tool> <json>` directly against the server.
-
-### Customising the persona
-
-Set these in the `env` block of your `.mcp.json`:
-
-```json
-"EVALHARNESS_PET_NAME": "Scout",
-"EVALHARNESS_PET_ICON": "(o_o)"
-```
-
----
 
 ## CVDP benchmark support
 
@@ -403,12 +455,12 @@ for hardware design and verification agents. It contains 749 problems across
 several categories, each with a task prompt, starting context, and a hidden
 test harness that grades the solution.
 
-evalharness can work with CVDP in three ways, with very different costs.
+Semiflow EvalBench can work with CVDP in three ways, with very different costs.
 
 ### Option 1: Import problem definitions (free)
 
 ```bash
-evalctl import-cvdp --dataset /path/to/cvdp_v1.0.2_agentic_code_generation_no_commercial.jsonl --limit 20
+evalbench import-cvdp --dataset /path/to/cvdp_v1.0.2_agentic_code_generation_no_commercial.jsonl --limit 20
 ```
 
 Reads the dataset and creates eval definitions you can browse and filter. Costs
@@ -423,7 +475,7 @@ If you have a results file from a previous CVDP run, import its verdicts as an
 external reference line:
 
 ```bash
-evalctl import-baseline --manifest /path/to/FINAL_MANIFEST.json
+evalbench import-baseline --manifest /path/to/FINAL_MANIFEST.json
 ```
 
 This gives you a real calibration number at zero cost. See the SiliconCrew
@@ -463,18 +515,18 @@ NVIDIA's official reference container.
 
 Repository: <https://github.com/naman-ranka/siliconcrew> (MIT licensed)
 
-### How evalharness relates to it
+### How Semiflow EvalBench relates to it
 
-**It does not depend on it.** evalharness is standalone and works fully without
+**It does not depend on it.** Semiflow EvalBench is standalone and works fully without
 SiliconCrew installed. No SiliconCrew code is bundled or vendored here.
 
 The connection is one optional, read-only adapter. If you have run CVDP through
 SiliconCrew's benchmark orchestrator, it produces a results file at
-`bench-orchestrator/final_runs/FINAL_MANIFEST.json`. evalharness can import
+`bench-orchestrator/final_runs/FINAL_MANIFEST.json`. Semiflow EvalBench can import
 those verdicts:
 
 ```bash
-evalctl import-baseline --manifest /path/to/siliconcrew/bench-orchestrator/final_runs/FINAL_MANIFEST.json
+evalbench import-baseline --manifest /path/to/siliconcrew/bench-orchestrator/final_runs/FINAL_MANIFEST.json
 ```
 
 You get output like:
@@ -491,7 +543,7 @@ Imported 92 reference verdict(s) - 60/92 PASS (65%)
 Verdicts imported this way were produced by **SiliconCrew's** harness: its
 agent, its model, its tools. Not yours.
 
-evalharness stamps them with a fixed synthetic harness identifier so they can
+Semiflow EvalBench stamps them with a fixed synthetic harness identifier so they can
 never be averaged into a measurement of your own system. They appear in the
 dashboard with a `reference` badge, they are reported separately in `score`
 output, and they are never marked stale, because they were never yours to
@@ -512,12 +564,12 @@ unavailable and everything else works normally.
 **Do I need to change how I work?**
 
 No. Do your work as usual. The only difference is running your verification
-command through `evalctl check` instead of directly.
+command through `evalbench check` instead of directly.
 
 **Does any of my code leave my machine?**
 
 No. Core functionality makes zero network calls. There is no telemetry, no
-analytics, and no update check. Everything lives in `.evalharness/` inside your
+analytics, and no update check. Everything lives in `.evalbench/` inside your
 repo, which the tool adds to your `.gitignore` automatically.
 
 **Does this work for software, or only hardware?**
@@ -529,7 +581,7 @@ work. Hardware terminology appears in the eval type labels (`rtl`,
 
 **Does it need an API key?**
 
-No. evalharness never calls a model. Your agent does the work; this tool
+No. Semiflow EvalBench never calls a model. Your agent does the work; this tool
 prepares the workspace and grades the result.
 
 **Why does my score say 100 percent when I have only one eval?**
@@ -567,12 +619,12 @@ script that greps for expected output all work.
 **Can my whole team share one set of evals?**
 
 Not yet. Evals live in a gitignored local folder. You could commit
-`.evalharness/` deliberately to share them, but this has not been tested and
+`.evalbench/` deliberately to share them, but this has not been tested and
 the harness hash is machine-specific, so treat that as unsupported for now.
 
 **How do I delete an eval I no longer want?**
 
-Edit `.evalharness/evals.json` and remove the entry, or set its `status` to
+Edit `.evalbench/evals.json` and remove the entry, or set its `status` to
 `rejected`. The files are plain JSON and safe to edit by hand.
 
 ---
@@ -582,12 +634,12 @@ Edit `.evalharness/evals.json` and remove the entry, or set its `status` to
 If you are testing this for someone, log friction as you hit it:
 
 ```bash
-evalctl feedback "the review prompt options were confusing"
+evalbench feedback "the review prompt options were confusing"
 ```
 
-Then send back `.evalharness/feedback.jsonl`.
+Then send back `.evalbench/feedback.jsonl`.
 
-If you are willing, `.evalharness/evals.json` and `.evalharness/runs.jsonl` are
+If you are willing, `.evalbench/evals.json` and `.evalbench/runs.jsonl` are
 also useful. They contain eval metadata, diffs of changes you approved, and
 verdicts. Review them first if your code is sensitive. Your source files are
 never included, and nothing is ever sent automatically.
@@ -596,7 +648,7 @@ never included, and nothing is ever sent automatically.
 
 ## License and attribution
 
-evalharness is MIT licensed. Copyright (c) 2026 Ankit Kumar. See
+Semiflow EvalBench is MIT licensed. Copyright (c) 2026 Ankit Kumar. See
 [LICENSE](LICENSE).
 
 Third-party components are documented in [NOTICE](NOTICE). In short:

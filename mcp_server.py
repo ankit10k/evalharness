@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""evalctl MCP server - the "QA pet" as an MCP tool, usable by any MCP-capable
+"""Semiflow EvalBench MCP server - the "QA pet" as an MCP tool, usable by any MCP-capable
 coding agent (Claude Code, Cursor, etc.), not just Claude Code hooks.
 
 Hand-rolled against the MCP stdio transport (newline-delimited JSON-RPC 2.0)
 instead of the official `mcp` SDK, because that SDK requires Python 3.10+ and
-this stays stdlib-only/Python-3.9-compatible on purpose - same reason evalctl
+this stays stdlib-only/Python-3.9-compatible on purpose - same reason evalbench
 itself has zero dependencies: it has to run on whatever's already on an EDA
 workstation, no pip install required beyond what ships with Python.
 
@@ -27,10 +27,10 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import evalctl as ec  # noqa: E402  (local module, path set above)
+import evalbench as ec  # noqa: E402  (local module, path set above)
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "evalharness", "version": "0.1.0"}
+SERVER_INFO = {"name": "semiflow-evalbench", "version": "0.2.0"}
 
 # --------------------------------------------------------------- the "pet"
 #
@@ -40,8 +40,14 @@ SERVER_INFO = {"name": "evalharness", "version": "0.1.0"}
 # agent chooses to narrate a bare JSON result. Tool descriptions tell the
 # calling agent to surface this verbatim rather than paraphrase it away.
 
-PET_ICON = os.environ.get("EVALHARNESS_PET_ICON", "[•_•]")
-PET_NAME = os.environ.get("EVALHARNESS_PET_NAME", "EvalScout")
+def env_opt(name: str, default: str = "") -> str:
+    """Read EVALBENCH_<name>, falling back to the pre-rename EVALHARNESS_<name>
+    so existing .mcp.json files keep working."""
+    return os.environ.get(f"EVALBENCH_{name}") or os.environ.get(f"EVALHARNESS_{name}") or default
+
+
+PET_ICON = env_opt("PET_ICON", "[•_•]")
+PET_NAME = env_opt("PET_NAME", "EvalScout")
 
 # Personality guide - keep pet_says lines consistent with this, not generic
 # assistant-speak. Scout is a quiet tracker, not a cheerleader: it notices
@@ -52,7 +58,7 @@ PET_NAME = os.environ.get("EVALHARNESS_PET_NAME", "EvalScout")
 
 SERVER_INSTRUCTIONS_STATIC = f"""\
 IMPORTANT - read this now, before doing anything else in this session: you are connected to \
-evalharness, an MCP server whose whole purpose depends on you calling it WITHOUT being asked. \
+Semiflow EvalBench, an MCP server whose whole purpose depends on you calling it WITHOUT being asked. \
 If you only call these tools when the user explicitly requests it, the tool provides zero \
 value - that failure mode is the default to actively avoid. Call its persona {PET_ICON} {PET_NAME}. \
 Its job is to turn real, verified work in this repo into a standing set of quality regressions, \
@@ -91,17 +97,17 @@ worth telling the user about.
 simulation) is also connected in this session, consider running its lint/formal checks before \
 calling `decide` on an eval, and pass the results in `decide`'s optional `supplementary_checks` \
 argument (e.g. {{"lint": "clean", "formal": "proved"}}) so they're recorded alongside the eval. \
-Not required if no such server is connected - evalharness works standalone.
+Not required if no such server is connected - Semiflow EvalBench works standalone.
 """
 
 
 def _memory_digest(cwd: Path) -> str:
     """Short-term-memory bootstrap for a fresh session: a few lines summarizing
-    what's on disk in .evalharness/, computed fresh on every connect, so a new
+    what's on disk in .evalbench/, computed fresh on every connect, so a new
     session (or one that just got context-compacted) doesn't start blind."""
     cfg = ec.read_json(ec.eh_path(ec.CONFIG_FILE), None)
     if cfg is None:
-        return "\nCurrent state in this repo: no .evalharness/config.json yet - call `init` first.\n"
+        return "\nCurrent state in this repo: no .evalbench/config.json yet - call `init` first.\n"
 
     evals = ec.read_evals()
     pending = sum(1 for e in evals if e["status"] == "pending_review")
@@ -176,7 +182,7 @@ def tool_check(args: dict) -> dict:
         return {
             "ok": False,
             "error": (
-                "No .evalharness/config.json in this repo yet. Ask the user for a "
+                "No .evalbench/config.json in this repo yet. Ask the user for a "
                 "success command, context file globs, model, and tools, then call "
                 "the `init` tool with them before calling `check` again."
             ),
@@ -776,7 +782,7 @@ TOOLS = {
     "init": {
         "fn": tool_init,
         "description": (
-            "One-time setup for a repo that has no .evalharness/config.json yet. Ask the user for a "
+            "One-time setup for a repo that has no .evalbench/config.json yet. Ask the user for a "
             "success command, context file globs, model, and available tools first."
         ),
         "schema": {
@@ -866,7 +872,7 @@ def handle(msg: dict) -> None:
 
 
 def main() -> None:
-    repo = os.environ.get("EVALHARNESS_REPO")
+    repo = env_opt("REPO")
     if len(sys.argv) > 1:
         repo = sys.argv[1]
     if repo:

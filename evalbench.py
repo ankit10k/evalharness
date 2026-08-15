@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""evalctl - minimal local eval harness for hardware coding agents.
+"""evalbench - minimal local eval harness for hardware coding agents.
 
-Stdlib only. Runs entirely on local files under .evalharness/ inside
+Stdlib only. Runs entirely on local files under .evalbench/ inside
 whatever repo you invoke it from. No server, no network calls, no
 assumptions about which simulator/EDA tool/agent you're using - the
 success command is always yours.
@@ -19,7 +19,8 @@ import time
 import uuid
 from pathlib import Path
 
-EH_DIR = ".evalharness"
+EH_DIR = ".evalbench"
+EH_DIR_LEGACY = ".evalharness"  # pre-rename name; still read so old data keeps working
 CONFIG_FILE = "config.json"
 CAPTURES_FILE = "captures.jsonl"
 EVALS_FILE = "evals.json"
@@ -27,8 +28,23 @@ RUNS_FILE = "runs.jsonl"
 FEEDBACK_FILE = "feedback.jsonl"
 
 
+def eh_dir_name(cwd: Path | None = None) -> str:
+    """Active state directory for this repo.
+
+    Prefers `.evalbench/`, but keeps using an existing `.evalbench/` if the
+    repo was set up before the rename. Nothing is moved automatically, so no
+    one loses history by upgrading.
+    """
+    base = cwd or Path.cwd()
+    if (base / EH_DIR).exists():
+        return EH_DIR
+    if (base / EH_DIR_LEGACY).exists():
+        return EH_DIR_LEGACY
+    return EH_DIR
+
+
 def eh_path(*parts: str) -> Path:
-    return Path.cwd() / EH_DIR / Path(*parts)
+    return Path.cwd() / eh_dir_name() / Path(*parts)
 
 
 def read_json(path: Path, default):
@@ -127,7 +143,7 @@ def cmd_init(args) -> int:
 
 def _ensure_gitignored(cwd: Path) -> None:
     gitignore = cwd / ".gitignore"
-    entry = f"{EH_DIR}/"
+    entry = f"{eh_dir_name(cwd)}/"
     existing = gitignore.read_text() if gitignore.exists() else ""
     if entry in existing.splitlines():
         return
@@ -140,17 +156,19 @@ def _ensure_gitignored(cwd: Path) -> None:
 def load_config() -> dict:
     cfg = read_json(eh_path(CONFIG_FILE), None)
     if cfg is None:
-        print("No .evalharness/config.json found. Run `evalctl init` first.", file=sys.stderr)
+        print("No .evalbench/config.json found. Run `evalbench init` first.", file=sys.stderr)
         sys.exit(1)
     return cfg
 
 
-_NOISE_PATHS = (EH_DIR, ".gitignore")
+# Both state-dir names are noise: a repo may hold either, and neither is the
+# user's actual work.
+_NOISE_PATHS = (EH_DIR, EH_DIR_LEGACY, ".gitignore")
 
 
 def _repo_changed(cwd: Path, post_diff: str) -> bool:
     """True if there's a real tracked-file diff, or untracked files other than
-    evalctl's own scaffolding (.evalharness/, .gitignore), which always shows
+    evalbench's own scaffolding (.evalbench/, .gitignore), which always shows
     up in `git status` and isn't the user's actual work."""
     if post_diff:
         return True
@@ -184,7 +202,7 @@ def cmd_wrap(args) -> int:
     load_config()
     command = args.cmd
     if not command:
-        print('Usage: evalctl wrap "<command>"  (quote it as one argument if it uses &&, |, etc.)', file=sys.stderr)
+        print('Usage: evalbench wrap "<command>"  (quote it as one argument if it uses &&, |, etc.)', file=sys.stderr)
         return 1
     capture = _capture(cwd, command)
     append_jsonl(eh_path(CAPTURES_FILE), capture)
@@ -349,7 +367,7 @@ def cmd_propose(args) -> int:
     cfg = load_config()
     captures = read_jsonl(eh_path(CAPTURES_FILE))
     if not captures:
-        print('No captures found. Run `evalctl wrap "<command>"` first.', file=sys.stderr)
+        print('No captures found. Run `evalbench wrap "<command>"` first.', file=sys.stderr)
         return 1
     capture = captures[-1]
     if args.capture_id:
@@ -361,7 +379,7 @@ def cmd_propose(args) -> int:
     evals = read_evals()
     evals.append(eval_record)
     write_json(eh_path(EVALS_FILE), evals)
-    print(f"Proposed {eval_record['eval_id']} - review with `evalctl review`.")
+    print(f"Proposed {eval_record['eval_id']} - review with `evalbench review`.")
     return 0
 
 
@@ -499,7 +517,7 @@ def _harness_label(cfg: dict) -> str:
 
 
 def cmd_harness(args) -> int:
-    """Name the current harness state, e.g. `evalctl harness v3 "added cache-debug skill"`.
+    """Name the current harness state, e.g. `evalbench harness v3 "added cache-debug skill"`.
     The content hash still detects silent drift; this gives it an ordered, human name."""
     cwd = Path.cwd()
     cfg = load_config()
@@ -579,7 +597,7 @@ def _execute_eval(cwd: Path, cfg: dict, ev: dict, commit: str | None) -> dict:
 #     Answers "can my system solve this task", which is what actually moves
 #     when the harness changes. Same shape as CVDP: (prompt, context, harness).
 #
-# evalharness makes no LLM calls, so it can't drive the agent itself. It sets
+# Semiflow EvalBench makes no LLM calls, so it can't drive the agent itself. It sets
 # the stage (start_attempt) and grades (grade_attempt); the calling agent does
 # the work in between - same split as check/decide.
 
@@ -680,7 +698,7 @@ def grade_attempt(cwd: Path, cfg: dict, attempt_id: str, keep_workspace: bool = 
     if not att["success_command"]:
         raise RuntimeError(
             f"{att['eval_id']} has no success_command - nothing to grade against. "
-            "Imported CVDP problems need a grading command (see `evalctl import-cvdp` notes on "
+            "Imported CVDP problems need a grading command (see `evalbench import-cvdp` notes on "
             "Docker/osvb grading) or a locally-defined one before they can be scored."
         )
 
@@ -1006,7 +1024,7 @@ def cmd_import_cvdp(args) -> int:
         dataset = (cwd / dataset).resolve()
     if not dataset.exists():
         print(f"Dataset not found: {dataset}\n\n"
-              "evalctl ships no CVDP data - obtain the JSONL from NVIDIA's CVDP benchmark\n"
+              "evalbench ships no CVDP data - obtain the JSONL from NVIDIA's CVDP benchmark\n"
               "distribution and pass its path with --dataset.", file=sys.stderr)
         return 1
 
@@ -1047,7 +1065,7 @@ def cmd_attempt(args) -> int:
     print(f"Attempt {att['attempt_id']} open.")
     print(f"  workspace: {att['workspace']}")
     print(f"  task: {att['input_prompt']}")
-    print(f"\nDo the work in that workspace, then: evalctl grade {att['attempt_id']}")
+    print(f"\nDo the work in that workspace, then: evalbench grade {att['attempt_id']}")
     return 0
 
 
@@ -1074,7 +1092,7 @@ def cmd_run(args) -> int:
         print(f"eval {args.eval_id} not found.", file=sys.stderr)
         return 1
     if ev["status"] != "approved":
-        print(f"eval {args.eval_id} is not approved (status={ev['status']}). Approve it via `evalctl review` first.")
+        print(f"eval {args.eval_id} is not approved (status={ev['status']}). Approve it via `evalbench review` first.")
         return 1
     try:
         run_record = _execute_eval(cwd, cfg, ev, args.commit)
@@ -1252,7 +1270,7 @@ def _print_score(cwd: Path, cfg: dict) -> None:
             print(f"  {row['eval_id']:14s} {row['verdict']:4s} [{row['type']:12s}] "
                   f"{row['summary'][:44]:44s} {row['passed_runs']}/{row['run_count']} runs ({cons}) ({marker})")
         if len(own) > _SCORE_ROW_LIMIT:
-            print(f"  ... and {len(own) - _SCORE_ROW_LIMIT} more (see `evalctl dashboard`)")
+            print(f"  ... and {len(own) - _SCORE_ROW_LIMIT} more (see `evalbench dashboard`)")
         if ref:
             rp = sum(1 for r in ref if r["verdict"] == "PASS")
             label = next((r["harness_label"] for r in ref if r["harness_label"]), "external")
@@ -1326,7 +1344,7 @@ def cmd_check(args) -> int:
             "timestamp": time.time(),
         }
         append_jsonl(eh_path(RUNS_FILE), run_record)
-        print(f"\nSaved as {ev['eval_id']} - future `evalctl check`/`evalctl replay` runs will track it.")
+        print(f"\nSaved as {ev['eval_id']} - future `evalbench check`/`evalbench replay` runs will track it.")
     else:
         print(f"\n{ev['eval_id']} not approved (status={ev['status']}) - not added to your regression set.")
 
@@ -1346,7 +1364,7 @@ def cmd_replay(args) -> int:
     approved = [e for e in evals if e["status"] == "approved" and e.get("success_command")]
     skipped = sum(1 for e in evals if e["status"] == "approved" and not e.get("success_command"))
     if not approved:
-        print("No runnable approved evals yet - run `evalctl check \"<cmd>\"` on some real work first.")
+        print("No runnable approved evals yet - run `evalbench check \"<cmd>\"` on some real work first.")
         if skipped:
             print(f"({skipped} approved eval(s) have no success command - reference/imported entries aren't replayable.)")
         return 0
@@ -1625,7 +1643,7 @@ _DASHBOARD_SHELL = """<!doctype html>
 </div>
 
 <script>
-const DATA = __EVALCTL_DATA__;
+const DATA = __EVALBENCH_DATA__;
 const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const pctClass = p => p >= 0.8 ? 'good' : p >= 0.5 ? 'mid' : 'bad';
 const ago = ts => {
@@ -1681,7 +1699,7 @@ DATA.suites.forEach(s => {
 const svg = document.getElementById('trend');
 const trend = DATA.trend.filter(t => t.total > 0);
 if (trend.length < 1) {
-  svg.outerHTML = '<div class="empty">No history yet. Run <code>evalctl replay</code> after a harness change to start a trend.</div>';
+  svg.outerHTML = '<div class="empty">No history yet. Run <code>evalbench replay</code> after a harness change to start a trend.</div>';
 } else {
   const W = 940, H = 130, PADX = 34, PADY = 20;
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -1771,7 +1789,7 @@ function render() {
     (filterType === 'all' || e.type === filterType) &&
     (filterSuite === 'all' || e.suite === filterSuite));
   if (!shown.length) {
-    listEl.innerHTML = '<div class="empty">No evals match. Run <code>evalctl check "&lt;your test command&gt;"</code> on real work to create some.</div>';
+    listEl.innerHTML = '<div class="empty">No evals match. Run <code>evalbench check "&lt;your test command&gt;"</code> on real work to create some.</div>';
     return;
   }
   shown.forEach(ev => {
@@ -1804,7 +1822,7 @@ function render() {
       '</div></div>' +
       '<div class="field"><label>input prompt (what an agent must solve)</label><div class="body">' +
         (ev.input_prompt ? esc(ev.input_prompt)
-          : '<span class="missing">not set - required before this eval can be attempted (evalctl attempt)</span>') +
+          : '<span class="missing">not set - required before this eval can be attempted (evalbench attempt)</span>') +
       '</div></div>' +
       (ev.reference
         ? '<div class="field"><label>external reference</label><div class="body">Verdict produced by <b>' +
@@ -1859,13 +1877,13 @@ render();
 
 
 def _write_dashboard(cwd: Path, cfg: dict) -> Path:
-    """Regenerate .evalharness/dashboard.html and return its path. Cheap
+    """Regenerate .evalbench/dashboard.html and return its path. Cheap
     enough (no external calls, just local file reads) to call after every
     check/decide/replay so the file is never stale."""
     payload = _build_web_payload(cwd, cfg)
     out_path = eh_path("dashboard.html")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    html = _DASHBOARD_SHELL.replace("__EVALCTL_DATA__", json.dumps(payload))
+    html = _DASHBOARD_SHELL.replace("__EVALBENCH_DATA__", json.dumps(payload))
     out_path.write_text(html)
     return out_path
 
@@ -1885,10 +1903,10 @@ def cmd_dashboard(args) -> int:
 
 
 def cmd_ask(args) -> int:
-    """Local, deterministic Q&A over your own .evalharness data - keyword
+    """Local, deterministic Q&A over your own .evalbench data - keyword
     routing, not an LLM. Answers only what's derivable from evals/runs/tags
     already on disk. For real natural-language questions, point an agent
-    (e.g. this Claude Code session) at .evalharness/*.json directly - that's
+    (e.g. this Claude Code session) at .evalbench/*.json directly - that's
     where actual understanding should live, not a second model call baked
     into this offline tool."""
     cwd = Path.cwd()
@@ -1898,12 +1916,12 @@ def cmd_ask(args) -> int:
     evals = read_evals()
 
     if not question:
-        print("Usage: evalctl ask \"<question>\"")
+        print("Usage: evalbench ask \"<question>\"")
         print("Understands: score / failing / trend / tags / category <name> / eval <id>")
         return 1
 
     if board is None:
-        print("No runs recorded yet - nothing to ask about. Run `evalctl check \"<cmd>\"` first.")
+        print("No runs recorded yet - nothing to ask about. Run `evalbench check \"<cmd>\"` first.")
         return 0
 
     if any(w in question for w in ("fail", "broken", "red")):
@@ -1918,7 +1936,7 @@ def cmd_ask(args) -> int:
 
     if any(w in question for w in ("trend", "improve", "history", "over time")):
         if not board["trend"]:
-            print("Not enough history yet - run `evalctl replay` after a harness change.")
+            print("Not enough history yet - run `evalbench replay` after a harness change.")
         else:
             for t in board["trend"]:
                 pct = 100 * t["passed"] / t["total"] if t["total"] else 0
@@ -1933,7 +1951,7 @@ def cmd_ask(args) -> int:
             for tag in e.get("tags", []):
                 tagged.setdefault(tag, []).append(e["eval_id"])
         if not tagged:
-            print("No evals tagged yet - use [t]ag during `evalctl check` review.")
+            print("No evals tagged yet - use [t]ag during `evalbench check` review.")
         else:
             for tag, ids in sorted(tagged.items()):
                 print(f"  {tag}: {', '.join(ids)}")
@@ -1970,7 +1988,7 @@ def cmd_ask(args) -> int:
         return 0
 
     print("Not sure how to answer that locally. I understand: score / failing / trend / tags / category <name> / eval <id>.")
-    print("For anything else, ask the agent you're running this alongside - point it at .evalharness/*.json.")
+    print("For anything else, ask the agent you're running this alongside - point it at .evalbench/*.json.")
     return 0
 
 
@@ -1978,7 +1996,7 @@ def cmd_feedback(args) -> int:
     tokens = strip_leading_separator(args.text)
     text = " ".join(tokens)
     if not text:
-        print('Usage: evalctl feedback "<text>"', file=sys.stderr)
+        print('Usage: evalbench feedback "<text>"', file=sys.stderr)
         return 1
     append_jsonl(eh_path(FEEDBACK_FILE), {
         "target_type": "general",
@@ -1994,10 +2012,10 @@ def cmd_feedback(args) -> int:
 # ------------------------------------------------------------------- CLI
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="evalctl", description="Minimal local eval harness for hardware coding agents.")
+    p = argparse.ArgumentParser(prog="evalbench", description="Semiflow EvalBench: measure whether your AI coding setup is actually improving.")
     sub = p.add_subparsers(dest="command", required=True)
 
-    p_init = sub.add_parser("init", help="Scaffold .evalharness/config.json in the current repo.")
+    p_init = sub.add_parser("init", help="Scaffold .evalbench/config.json in the current repo.")
     p_init.add_argument("--repo-name")
     p_init.add_argument("--success-command")
     p_init.add_argument("--context-globs", help="Comma-separated globs, e.g. CLAUDE.md,skills/**")
@@ -2081,7 +2099,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_score = sub.add_parser("score", help="Print pass rate and current harness id.")
     p_score.set_defaults(func=cmd_score)
 
-    p_dashboard = sub.add_parser("dashboard", help="Build the local web app (.evalharness/dashboard.html) and open it.")
+    p_dashboard = sub.add_parser("dashboard", help="Build the local web app (.evalbench/dashboard.html) and open it.")
     p_dashboard.add_argument("--no-open", action="store_true", help="Write the file but don't open a browser.")
     p_dashboard.set_defaults(func=cmd_dashboard)
 
