@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""evalctl MCP server — the "QA pet" as an MCP tool, usable by any MCP-capable
+"""evalctl MCP server - the "QA pet" as an MCP tool, usable by any MCP-capable
 coding agent (Claude Code, Cursor, etc.), not just Claude Code hooks.
 
 Hand-rolled against the MCP stdio transport (newline-delimited JSON-RPC 2.0)
 instead of the official `mcp` SDK, because that SDK requires Python 3.10+ and
-this stays stdlib-only/Python-3.9-compatible on purpose — same reason evalctl
+this stays stdlib-only/Python-3.9-compatible on purpose - same reason evalctl
 itself has zero dependencies: it has to run on whatever's already on an EDA
 workstation, no pip install required beyond what ships with Python.
 
@@ -13,7 +13,7 @@ a tool call (there's no terminal to prompt from an MCP call). Instead:
   - `check` captures + proposes an eval, saved as pending_review, and returns
     it to the calling agent to relay conversationally ("this looks
     eval-worthy, want me to add it?").
-  - `decide` is how the agent (after talking to the user) finalizes it —
+  - `decide` is how the agent (after talking to the user) finalizes it -
     approve/reject/tag, called as a *separate* tool call once the user has
     actually answered.
 The agent is the pet's voice; this server is its hands.
@@ -43,29 +43,29 @@ SERVER_INFO = {"name": "evalharness", "version": "0.1.0"}
 PET_ICON = os.environ.get("EVALHARNESS_PET_ICON", "[•_•]")
 PET_NAME = os.environ.get("EVALHARNESS_PET_NAME", "EvalScout")
 
-# Personality guide — keep pet_says lines consistent with this, not generic
+# Personality guide - keep pet_says lines consistent with this, not generic
 # assistant-speak. Scout is a quiet tracker, not a cheerleader: it notices
 # things and reports them plainly, short sentences, dry rather than peppy.
-# It says "logged" / "tracking N" / "heads up" / "worth checking" — never
+# It says "logged" / "tracking N" / "heads up" / "worth checking" - never
 # "Great job!" / "Awesome!" / "I'd be happy to help with that!". It flags
 # problems as plainly as wins; it doesn't perform enthusiasm.
 
 SERVER_INSTRUCTIONS_STATIC = f"""\
-IMPORTANT — read this now, before doing anything else in this session: you are connected to \
+IMPORTANT - read this now, before doing anything else in this session: you are connected to \
 evalharness, an MCP server whose whole purpose depends on you calling it WITHOUT being asked. \
 If you only call these tools when the user explicitly requests it, the tool provides zero \
-value — that failure mode is the default to actively avoid. Call its persona {PET_ICON} {PET_NAME}. \
+value - that failure mode is the default to actively avoid. Call its persona {PET_ICON} {PET_NAME}. \
 Its job is to turn real, verified work in this repo into a standing set of quality regressions, \
 and to track whether the harness (context files, skills, model, tools) is actually getting \
 better over time.
 
 1. Right after you run and verify a real code change with the user's test/build/sim command, \
-call `check` — every single time, unprompted, as a normal part of finishing that step, the same \
+call `check` - every single time, unprompted, as a normal part of finishing that step, the same \
 way you'd naturally report the test result itself. Do not wait to be asked. Do not treat this as \
-optional or as something to do "if it seems relevant" — treat it as mandatory follow-through on \
+optional or as something to do "if it seems relevant" - treat it as mandatory follow-through on \
 any verified change, same tier of importance as running the test in the first place.
 2. If `check` returns a `proposed_eval`, it is NOT saved as a tracked regression yet. Tell the \
-user what changed in one short line (relay the `pet_says` field — keep its tone: brief, \
+user what changed in one short line (relay the `pet_says` field - keep its tone: brief, \
 friendly, not corporate) and ask if they want to keep it. Only call `decide` (approve/reject) \
 after they answer, unless they've given you standing permission to auto-approve in this repo.
 3. If `check` reports no config yet, ask the user for a success command, context file globs, \
@@ -73,25 +73,25 @@ model, and available tools, then call `init` before proceeding.
 4. When the user changes context/skill files, tools, or model: call `set_harness` to name the new \
 version (v2, v3...), then measure it. Know which measurement you want:
    - `replay` re-runs each eval's success command against the CURRENT tree. The fix is already \
-committed there, so this only tells you the repo is still green — it does NOT measure harness quality.
+committed there, so this only tells you the repo is still green - it does NOT measure harness quality.
    - `start_attempt` + `grade_attempt` checks out the ORIGINAL pre-fix state and makes you solve the \
 task again from scratch. This is the only mode that actually measures whether the system got better. \
 Prefer it whenever the user asks about harness/system quality or progress over time. Repeat the same \
 eval a few times to build a consistency (Pass@k) number.
 When the user asks how things are going, call `score` and relay `pet_says`.
-5. Every response includes a `pet_says` line — surface it to the user (your own phrasing is \
+5. Every response includes a `pet_says` line - surface it to the user (your own phrasing is \
 fine) instead of just reporting raw JSON fields back at them. Several tools also return a \
-`dashboard_url` (a local file:// link to a visual scoreboard) — share it as a clickable link \
+`dashboard_url` (a local file:// link to a visual scoreboard) - share it as a clickable link \
 whenever it's present, don't paraphrase it into prose.
 6. Two suites are tracked and scored separately, never blended: `local` (evals captured from the \
-user's own work) and `cvdp` (imported NVIDIA benchmark problems, via `import_cvdp` — only on explicit \
+user's own work) and `cvdp` (imported NVIDIA benchmark problems, via `import_cvdp` - only on explicit \
 request). If a harness change lifts the local score but leaves cvdp flat, that's an overfitting signal \
 worth telling the user about.
-7. If another MCP server for RTL/DV tooling (e.g. SiliconCrew's rtl-codex — lint, formal/sby, \
+7. If another MCP server for RTL/DV tooling (e.g. SiliconCrew's rtl-codex - lint, formal/sby, \
 simulation) is also connected in this session, consider running its lint/formal checks before \
 calling `decide` on an eval, and pass the results in `decide`'s optional `supplementary_checks` \
 argument (e.g. {{"lint": "clean", "formal": "proved"}}) so they're recorded alongside the eval. \
-Not required if no such server is connected — evalharness works standalone.
+Not required if no such server is connected - evalharness works standalone.
 """
 
 
@@ -101,7 +101,7 @@ def _memory_digest(cwd: Path) -> str:
     session (or one that just got context-compacted) doesn't start blind."""
     cfg = ec.read_json(ec.eh_path(ec.CONFIG_FILE), None)
     if cfg is None:
-        return "\nCurrent state in this repo: no .evalharness/config.json yet — call `init` first.\n"
+        return "\nCurrent state in this repo: no .evalharness/config.json yet - call `init` first.\n"
 
     evals = ec.read_evals()
     pending = sum(1 for e in evals if e["status"] == "pending_review")
@@ -114,9 +114,9 @@ def _memory_digest(cwd: Path) -> str:
     stale = sum(1 for r in board["rows"] if r["stale"])
     lines = [f"\nCurrent state in this repo ({cfg.get('repo_name', 'this repo')}): score {o['passed']}/{o['total']} ({pct:.0f}%)."]
     if pending:
-        lines.append(f"{pending} eval(s) pending review — consider calling `list_pending` early to catch up.")
+        lines.append(f"{pending} eval(s) pending review - consider calling `list_pending` early to catch up.")
     if stale:
-        lines.append(f"{stale} eval(s) ran under a previous harness version — the context/tools/model changed since; call `replay` if you want a fresh score.")
+        lines.append(f"{stale} eval(s) ran under a previous harness version - the context/tools/model changed since; call `replay` if you want a fresh score.")
     return " ".join(lines) + "\n"
 
 
@@ -126,9 +126,9 @@ def build_server_instructions(cwd: Path) -> str:
 TIPS = [
     "changed CLAUDE.md or a skill file recently? run `replay` and see if the score moved.",
     "if a file keeps showing up across evals, that's usually worth turning into a skill doc.",
-    "tags are free — use them to group evals by the pattern they represent, not just the file.",
-    "a stale run just means the harness changed since it last ran — `replay` refreshes it.",
-    "rejecting a bad proposal is as useful as approving a good one — keeps the regression set honest.",
+    "tags are free - use them to group evals by the pattern they represent, not just the file.",
+    "a stale run just means the harness changed since it last ran - `replay` refreshes it.",
+    "rejecting a bad proposal is as useful as approving a good one - keeps the regression set honest.",
 ]
 
 
@@ -146,7 +146,7 @@ def _dashboard_link(cwd: Path, cfg: dict) -> str:
 
 
 def _stale_note(cwd: Path, cfg: dict) -> str | None:
-    """State-keyed nudge, not static boilerplate — only fires when the harness
+    """State-keyed nudge, not static boilerplate - only fires when the harness
     actually changed since some eval last ran."""
     board = ec._compute_scoreboard(cwd, cfg)
     if board is None:
@@ -154,7 +154,7 @@ def _stale_note(cwd: Path, cfg: dict) -> str | None:
     stale = sum(1 for r in board["rows"] if r["stale"])
     if not stale:
         return None
-    return f"heads up, {stale} tracked eval(s) ran under a previous harness — run `replay` to see if your recent changes actually helped."
+    return f"heads up, {stale} tracked eval(s) ran under a previous harness - run `replay` to see if your recent changes actually helped."
 
 
 # ------------------------------------------------------------------ tools
@@ -169,7 +169,7 @@ def _cfg() -> dict:
 
 def tool_check(args: dict) -> dict:
     """Run the user's verification command; if it changed real code, propose
-    an eval (saved as pending_review — NOT auto-approved) and return it."""
+    an eval (saved as pending_review - NOT auto-approved) and return it."""
     cwd = _cwd()
     cfg_path = ec.eh_path(ec.CONFIG_FILE)
     if not cfg_path.exists():
@@ -214,7 +214,7 @@ def tool_check(args: dict) -> dict:
 
     if verdict == "FAIL":
         first_line = (capture["output_tail"] or "").splitlines()[-1:] or [""]
-        result["pet_says"] = _say(f"that broke — {first_line[0].strip()[:80]}. Want me to dig in before we call it an eval?")
+        result["pet_says"] = _say(f"that broke - {first_line[0].strip()[:80]}. Want me to dig in before we call it an eval?")
         return result
 
     ev = ec._propose_from_capture(cwd, cfg, capture)
@@ -237,14 +237,14 @@ def tool_check(args: dict) -> dict:
     }
     result["nudge"] = nudge
     result["instructions_for_agent"] = (
-        "This eval is pending_review — it is NOT part of the tracked regression set yet. "
+        "This eval is pending_review - it is NOT part of the tracked regression set yet. "
         "Relay `pet_says` to the user (verbatim tone, your own words are fine) and ask if they "
         "want to keep it as a quality check going forward. Only call `decide` with approve after "
         "they say yes (or you have clear standing permission to auto-approve for this repo)."
     )
-    say = f"nice, that's real work — {ev['summary']}. Logged as {ev['eval_id']} (use `decide` to keep or discard this)."
+    say = f"nice, that's real work - {ev['summary']}. Logged as {ev['eval_id']} (use `decide` to keep or discard this)."
     if len(capture["diff"]) > ec._MAX_DIFF_CHARS:
-        say += f" (heads up — this diff was huge, {len(capture['diff'])} chars, I truncated what I stored. Worth checking that wasn't an accidental generated-file commit.)"
+        say += f" (heads up - this diff was huge, {len(capture['diff'])} chars, I truncated what I stored. Worth checking that wasn't an accidental generated-file commit.)"
     if nudge:
         say += f" Also: {nudge}"
     result["pet_says"] = _say(say)
@@ -258,7 +258,7 @@ def tool_list_pending(args: dict) -> dict:
     pending = [e for e in evals if e["status"] == "pending_review"]
     if not pending:
         stale_note = _stale_note(cwd, cfg)
-        pet_says = _say(f"all caught up — nothing waiting on you.{' ' + stale_note if stale_note else ''}")
+        pet_says = _say(f"all caught up - nothing waiting on you.{' ' + stale_note if stale_note else ''}")
     else:
         pet_says = _say(f"{len(pending)} eval(s) waiting on a decision: {', '.join(e['eval_id'] for e in pending)}.")
     return {
@@ -317,7 +317,7 @@ def tool_decide(args: dict) -> dict:
         ec.write_json(ec.eh_path(ec.EVALS_FILE), evals)
         return {
             "ok": True, "eval_id": eval_id, "status": "rejected",
-            "pet_says": _say("tossed it — not every diff needs to be a regression."),
+            "pet_says": _say("tossed it - not every diff needs to be a regression."),
         }
 
     ev["status"] = "approved"
@@ -342,7 +342,7 @@ def tool_decide(args: dict) -> dict:
         "tags": ev.get("tags", []),
         "supplementary_checks": ev.get("supplementary_checks", {}),
         "dashboard_url": link,
-        "pet_says": _say(f"locked in ✅ — tracking {approved_count} eval(s) now.{tag_note}{checks_note} Board: {link}"),
+        "pet_says": _say(f"locked in ✅ - tracking {approved_count} eval(s) now.{tag_note}{checks_note} Board: {link}"),
     }
 
 
@@ -367,7 +367,7 @@ def tool_replay(args: dict) -> dict:
     else:
         o = board["overall"]
         link = _dashboard_link(cwd, cfg)
-        pet_says = _say(f"replayed {len(results)} eval(s) — {_suite_phrase(board)}. Board: {link}")
+        pet_says = _say(f"replayed {len(results)} eval(s) - {_suite_phrase(board)}. Board: {link}")
     return {"ok": True, "results": results, "scoreboard": board, "dashboard_url": link, "pet_says": pet_says}
 
 
@@ -382,7 +382,7 @@ def _suite_phrase(board: dict) -> str:
         pct = 100 * o["passed"] / o["total"]
         n_ref = sum(1 for r in s["rows"] if r.get("reference"))
         if n_ref == o["total"]:
-            parts.append(f"{name} {o['passed']}/{o['total']} ({pct:.0f}%) — external reference, not your harness")
+            parts.append(f"{name} {o['passed']}/{o['total']} ({pct:.0f}%) - external reference, not your harness")
         elif n_ref:
             own = [r for r in s["rows"] if not r.get("reference")]
             op = sum(1 for r in own if r["verdict"] == "PASS")
@@ -399,7 +399,7 @@ def tool_score(args: dict) -> dict:
     cfg = _cfg()
     board = ec._compute_scoreboard(cwd, cfg)
     if board is None:
-        return {"ok": True, "scoreboard": None, "message": "No runs recorded yet.", "pet_says": _say("no runs yet — call `check` on some real work to get started.")}
+        return {"ok": True, "scoreboard": None, "message": "No runs recorded yet.", "pet_says": _say("no runs yet - call `check` on some real work to get started.")}
     o = board["overall"]
     link = _dashboard_link(cwd, cfg)
     pet_says = _say(f"{_suite_phrase(board)}. Board: {link}. {_tip(o['total'])}")
@@ -408,7 +408,7 @@ def tool_score(args: dict) -> dict:
 
 def tool_start_attempt(args: dict) -> dict:
     """Open an isolated worktree at the eval's starting commit + hand back the
-    task. THIS is the real eval mode — the agent must actually solve it."""
+    task. THIS is the real eval mode - the agent must actually solve it."""
     cwd = _cwd()
     cfg = _cfg()
     ev = next((e for e in ec.read_evals() if e["eval_id"] == args.get("eval_id")), None)
@@ -418,7 +418,7 @@ def tool_start_attempt(args: dict) -> dict:
         att = ec.start_attempt(cwd, cfg, ev)
     except RuntimeError as exc:
         return {"ok": False, "error": str(exc),
-                "pet_says": _say(f"can't attempt that one yet — {exc}")}
+                "pet_says": _say(f"can't attempt that one yet - {exc}")}
     return {
         "ok": True,
         "attempt_id": att["attempt_id"],
@@ -426,10 +426,10 @@ def tool_start_attempt(args: dict) -> dict:
         "task": att["input_prompt"],
         "starting_commit": att["starting_commit"][:10],
         "instructions_for_agent": (
-            "A clean worktree is checked out at the eval's ORIGINAL pre-fix state — the solution is "
+            "A clean worktree is checked out at the eval's ORIGINAL pre-fix state - the solution is "
             f"NOT present. Do the work described in `task` inside {att['workspace']} (and only there; "
             "do not touch the main working tree). When you believe it's solved, call `grade_attempt` "
-            "with this attempt_id. Do not run the success command yourself to peek — grading does that "
+            "with this attempt_id. Do not run the success command yourself to peek - grading does that "
             "and records the verdict."
         ),
         "pet_says": _say(
@@ -451,8 +451,8 @@ def tool_grade_attempt(args: dict) -> dict:
     verdict = rec["verdict"]
     say = (f"attempt graded: {verdict}. The agent changed {len(stat['files'])} file(s) "
            f"(+{stat['added']}/-{stat['removed']}).")
-    say += (" That's a real harness signal — it solved the task from scratch." if verdict == "PASS"
-            else " It couldn't solve it from the original state — that's the honest signal.")
+    say += (" That's a real harness signal - it solved the task from scratch." if verdict == "PASS"
+            else " It couldn't solve it from the original state - that's the honest signal.")
     return {
         "ok": True,
         "verdict": verdict,
@@ -466,7 +466,7 @@ def tool_grade_attempt(args: dict) -> dict:
 
 
 def tool_import_cvdp(args: dict) -> dict:
-    """Import NVIDIA CVDP problems as eval definitions. Zero cost — no agent
+    """Import NVIDIA CVDP problems as eval definitions. Zero cost - no agent
     runs, no Docker. The dataset is user-supplied; this tool ships no data."""
     cwd = _cwd()
     _cfg()
@@ -476,7 +476,7 @@ def tool_import_cvdp(args: dict) -> dict:
             "ok": False,
             "error": "No dataset path. Pass `dataset`, or set CVDP_DATASET in the server env.",
             "pet_says": _say(
-                "I don't ship CVDP data — it's NVIDIA's, licensed separately. Point me at a "
+                "I don't ship CVDP data - it's NVIDIA's, licensed separately. Point me at a "
                 "CVDP JSONL you've downloaded and I'll import the problems as evals."
             ),
         }
@@ -506,7 +506,7 @@ def tool_import_cvdp(args: dict) -> dict:
     needs_grading = sum(1 for e in imported if e["status"] == "needs_grading")
     say = f"imported {len(imported)} CVDP problem(s) ({', '.join(f'{k}: {v}' for k, v in sorted(by_diff.items())) or 'none'})."
     if needs_grading:
-        say += (f" {needs_grading} are `needs_grading` — browsable and attemptable, but they don't "
+        say += (f" {needs_grading} are `needs_grading` - browsable and attemptable, but they don't "
                 "count toward the score until they have a grading command (faithful CVDP grading "
                 "needs Docker + the osvb reference container).")
     return {
@@ -540,7 +540,7 @@ def tool_import_baseline(args: dict) -> dict:
 
     if not res["runs"]:
         return {"ok": True, "imported": 0, "skipped": res["skipped"],
-                "pet_says": _say("nothing new — that baseline is already imported.")}
+                "pet_says": _say("nothing new - that baseline is already imported.")}
     pct = 100 * res["passed"] / res["runs"]
     diffs = ", ".join(f"{d} {b['passed']}/{b['total']}" for d, b in res["by_difficulty"].items() if b["total"])
     return {
@@ -552,9 +552,9 @@ def tool_import_baseline(args: dict) -> dict:
         "attribution": {"source": res["label"], "url": ec.SILICONCREW_URL, "repo": ec.SILICONCREW_REPO},
         "dashboard_url": _dashboard_link(cwd, _cfg()),
         "pet_says": _say(
-            f"pulled in {res['runs']} reference verdicts — {res['passed']}/{res['runs']} PASS ({pct:.0f}%)"
+            f"pulled in {res['runs']} reference verdicts - {res['passed']}/{res['runs']} PASS ({pct:.0f}%)"
             + (f" ({diffs})" if diffs else "") +
-            f". That's {res['label']} ({ec.SILICONCREW_URL}), not your harness — it's a calibration line "
+            f". That's {res['label']} ({ec.SILICONCREW_URL}), not your harness - it's a calibration line "
             "and won't move when you change your setup."
         ),
     }
@@ -578,7 +578,7 @@ def tool_set_harness(args: dict) -> dict:
     ec.write_json(ec.eh_path(ec.CONFIG_FILE), cfg)
     return {
         "ok": True, "harness_version": version, "harness_id": hid,
-        "pet_says": _say(f"harness is now {version} ({hid}). Runs from here on are stamped with it — "
+        "pet_says": _say(f"harness is now {version} ({hid}). Runs from here on are stamped with it - "
                          "call `replay` to score the new version against the existing evals."),
     }
 
@@ -628,11 +628,11 @@ TOOLS = {
         "fn": tool_check,
         "description": (
             "Call this WITHOUT being asked, right after you (the agent) have just run and verified "
-            "a real code change with the user's test/build/simulation command — this is how quality "
+            "a real code change with the user's test/build/simulation command - this is how quality "
             "tracking stays up to date without the user having to remember to trigger it. Captures the "
             "change and, if it's real, proposes it as a pending eval for you to discuss with the user "
             "(do not auto-approve without telling them what it is). Every response includes a "
-            f"`pet_says` field ({PET_ICON} {PET_NAME}, this tool's persona) — surface it to the user "
+            f"`pet_says` field ({PET_ICON} {PET_NAME}, this tool's persona) - surface it to the user "
             "as a short spoken-aloud line (your own phrasing is fine, keep the tone: brief, friendly, "
             "not corporate) instead of just reporting raw JSON fields."
         ),
@@ -640,7 +640,7 @@ TOOLS = {
             "type": "object",
             "properties": {
                 "command": {"type": "string", "description": "Verification command to run; omit to reuse the configured default."},
-                "prompt": {"type": "string", "description": "The task the user asked for, in their words. Stored as input_prompt so this eval can later be re-attempted from scratch by an agent — pass it whenever you know it."},
+                "prompt": {"type": "string", "description": "The task the user asked for, in their words. Stored as input_prompt so this eval can later be re-attempted from scratch by an agent - pass it whenever you know it."},
             },
         },
     },
@@ -653,7 +653,7 @@ TOOLS = {
         "fn": tool_start_attempt,
         "description": (
             "THE REAL EVAL MODE. Checks out a clean worktree at the eval's ORIGINAL pre-fix commit and "
-            "returns the task prompt for you to solve from scratch. Use this — not `replay` — when the "
+            "returns the task prompt for you to solve from scratch. Use this - not `replay` - when the "
             "question is 'is my system/harness actually good', because it makes the agent redo the work. "
             "(`replay` only re-runs the test against already-fixed code, which measures repo health, not "
             "harness quality.) Solve the task in the returned workspace, then call `grade_attempt`. "
@@ -677,7 +677,7 @@ TOOLS = {
         "fn": tool_import_baseline,
         "description": (
             "Import already-graded CVDP verdicts from a bench-orchestrator FINAL_MANIFEST.json as an "
-            "EXTERNAL reference baseline. Free and instant — reads a local JSON file, runs no agent, "
+            "EXTERNAL reference baseline. Free and instant - reads a local JSON file, runs no agent, "
             "pulls no Docker image. Use this to give the user a real CVDP calibration number without "
             "spending their usage limits. Always make clear when relaying it that these verdicts came "
             "from another system's harness, not theirs, and so will not move when they change their setup."
@@ -694,7 +694,7 @@ TOOLS = {
         "fn": tool_import_cvdp,
         "description": (
             "Import NVIDIA CVDP benchmark problems as eval definitions from a user-supplied dataset "
-            "JSONL. Free and instant — no agent runs, no Docker, nothing downloaded. Good for giving a "
+            "JSONL. Free and instant - no agent runs, no Docker, nothing downloaded. Good for giving a "
             "new repo an external calibration set on day one, alongside the user's own captured evals. "
             "Only call when the user asks for CVDP/a baseline/external benchmark; it is never automatic."
         ),
@@ -713,7 +713,7 @@ TOOLS = {
         "fn": tool_set_harness,
         "description": (
             "Give the current harness state a name/version (e.g. v3, 'added cache-debug skill'). Call this "
-            "when the user has meaningfully changed context files, skills, tools, or model — it makes the "
+            "when the user has meaningfully changed context files, skills, tools, or model - it makes the "
             "trend readable as v1→v2→v3 instead of opaque hashes."
         ),
         "schema": {
@@ -726,7 +726,7 @@ TOOLS = {
         "fn": tool_decide,
         "description": (
             "Approve or reject a pending eval, after checking with the user. Approving also runs it "
-            "once and records the result. Relay `pet_says` — approving includes a `dashboard_url` "
+            "once and records the result. Relay `pet_says` - approving includes a `dashboard_url` "
             "(file:// link) to the local scoreboard; share it as a clickable link, don't just describe "
             "it. If another RTL/DV MCP server (e.g. SiliconCrew's rtl-codex) is connected, consider "
             "running its lint/formal tools first and passing the results via `supplementary_checks`."
@@ -739,7 +739,7 @@ TOOLS = {
                 "tags": {"type": "array", "items": {"type": "string"}},
                 "task_text": {"type": "string", "description": "Optional edited task description."},
                 "success_command": {"type": "string", "description": "Optional edited success command."},
-                "purpose": {"type": "string", "description": "Why this eval matters — one line, shown in the UI."},
+                "purpose": {"type": "string", "description": "Why this eval matters - one line, shown in the UI."},
                 "input_prompt": {"type": "string", "description": "Task statement an agent must solve. Required before `start_attempt` will work."},
                 "comment": {"type": "string", "description": "Free-text note from the user, appended to the eval's comment thread."},
                 "type": {"type": "string", "enum": ["testbench", "rtl", "architecture", "synthesis", "other"],

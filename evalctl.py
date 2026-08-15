@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""evalctl — minimal local eval harness for hardware coding agents.
+"""evalctl - minimal local eval harness for hardware coding agents.
 
 Stdlib only. Runs entirely on local files under .evalharness/ inside
 whatever repo you invoke it from. No server, no network calls, no
-assumptions about which simulator/EDA tool/agent you're using — the
+assumptions about which simulator/EDA tool/agent you're using - the
 success command is always yours.
 """
 from __future__ import annotations
@@ -189,7 +189,7 @@ def cmd_wrap(args) -> int:
     capture = _capture(cwd, command)
     append_jsonl(eh_path(CAPTURES_FILE), capture)
     verdict = "PASS" if capture["exit_code"] == 0 else "FAIL"
-    print(f"[wrap] {verdict} in {capture['duration_sec']:.1f}s — capture {capture['capture_id']} recorded.")
+    print(f"[wrap] {verdict} in {capture['duration_sec']:.1f}s - capture {capture['capture_id']} recorded.")
     return 0
 
 
@@ -199,7 +199,7 @@ def _commit_subject(cwd: Path, commit: str) -> str:
     return git(cwd, "log", "-1", "--format=%s", commit)
 
 
-# Eval type taxonomy. Order matters — first match wins per file, so the more
+# Eval type taxonomy. Order matters - first match wins per file, so the more
 # specific patterns (testbench, synthesis) must precede the generic RTL
 # extensions, otherwise a file like tb/foo_tb.sv would be typed as "rtl".
 _TYPE_RULES = (
@@ -231,7 +231,7 @@ def _diffstat(diff_text: str) -> dict:
 
 
 def _infer_type(files: list[str]) -> str:
-    """Best-effort type from touched file paths. A heuristic, not judgment —
+    """Best-effort type from touched file paths. A heuristic, not judgment -
     the agent/user can override it at decide time."""
     if not files:
         return "other"
@@ -247,7 +247,7 @@ def _infer_type(files: list[str]) -> str:
     return max(votes, key=votes.get)
 
 
-_MAX_DIFF_CHARS = 20_000  # ~a few hundred lines — caps storage growth and, more importantly,
+_MAX_DIFF_CHARS = 20_000  # ~a few hundred lines - caps storage growth and, more importantly,
                           # what lands in an agent's context window when it reads an eval back
 
 
@@ -256,7 +256,7 @@ def _cap_diff(diff_text: str) -> str:
         return diff_text
     kept = diff_text[:_MAX_DIFF_CHARS]
     dropped = len(diff_text) - _MAX_DIFF_CHARS
-    return f"{kept}\n\n... [truncated, {dropped} more chars — this diff was unusually large, worth checking why]"
+    return f"{kept}\n\n... [truncated, {dropped} more chars - this diff was unusually large, worth checking why]"
 
 
 def _code_links(cwd: Path, files: list[str]) -> list[dict]:
@@ -280,7 +280,7 @@ def _propose_from_capture(cwd: Path, cfg: dict, capture: dict) -> dict:
         "starting_commit": capture["pre_commit"],
         "type": eval_type,
         "summary": f"{subject} ({files_summary or 'no files touched'})",
-        "purpose": "",            # why this eval matters — user-supplied at decide time
+        "purpose": "",            # why this eval matters - user-supplied at decide time
         "input_prompt": capture.get("input_prompt", ""),  # the task an agent must solve
         "task_text": f"Reproduce/extend work from: {subject}\n\nCommand run: {capture['command']}",
         "success_command": success_command,
@@ -315,7 +315,7 @@ def read_evals() -> list[dict]:
 
 
 def _eval_summary(ev: dict) -> str:
-    """One-line label. Guards against empty summary/task_text — reference stubs
+    """One-line label. Guards against empty summary/task_text - reference stubs
     imported from a manifest have no task text at all."""
     for candidate in (ev.get("summary"), ev.get("task_text")):
         if candidate:
@@ -326,7 +326,7 @@ def _eval_summary(ev: dict) -> str:
 
 
 def _nudge_for(cwd: Path, ev: dict) -> str | None:
-    """Local, deterministic pattern-spotting — no LLM call. Looks at prior
+    """Local, deterministic pattern-spotting - no LLM call. Looks at prior
     evals for signals worth flagging to the person reviewing: a file that
     keeps coming back, or a fresh FAIL streak on this category."""
     files = set(ev.get("diffstat", {}).get("files", []))
@@ -338,7 +338,7 @@ def _nudge_for(cwd: Path, ev: dict) -> str | None:
         touched = files & {f for e in hits for f in e.get("diffstat", {}).get("files", [])}
         return (
             f"note: {', '.join(sorted(touched))} has come up in {len(hits)} prior eval(s) "
-            f"({', '.join(h['eval_id'] for h in hits[-3:])}) — might be worth a tag or a skill doc "
+            f"({', '.join(h['eval_id'] for h in hits[-3:])}) - might be worth a tag or a skill doc "
             "if this is a recurring pattern, not a one-off."
         )
     return None
@@ -361,7 +361,7 @@ def cmd_propose(args) -> int:
     evals = read_evals()
     evals.append(eval_record)
     write_json(eh_path(EVALS_FILE), evals)
-    print(f"Proposed {eval_record['eval_id']} — review with `evalctl review`.")
+    print(f"Proposed {eval_record['eval_id']} - review with `evalctl review`.")
     return 0
 
 
@@ -377,7 +377,7 @@ def _review_one(ev: dict, nudge: str | None = None) -> None:
     if ev.get("input_prompt"):
         print(f"  prompt: {ev['input_prompt'][:100]}")
     else:
-        print("  \033[33mprompt: (none — needed before this eval can be attempted)\033[0m")
+        print("  \033[33mprompt: (none - needed before this eval can be attempted)\033[0m")
     if ev.get("tags"):
         print(f"  tags: {', '.join(ev['tags'])}")
     if ev.get("comments"):
@@ -414,13 +414,13 @@ def _review_one(ev: dict, nudge: str | None = None) -> None:
             if new_type in EVAL_TYPES:
                 ev["type"] = new_type
             elif new_type:
-                print(f"  '{new_type}' is not a known type — keeping {ev.get('type')}")
+                print(f"  '{new_type}' is not a known type - keeping {ev.get('type')}")
             continue
         if choice == "a":
             ev["status"] = "approved"
             return
         elif choice == "e":
-            new_purpose = input("Purpose — why this eval matters (blank = keep): ").strip()
+            new_purpose = input("Purpose - why this eval matters (blank = keep): ").strip()
             if new_purpose:
                 ev["purpose"] = new_purpose
             new_task = input("New task_text (blank = keep): ").strip()
@@ -447,7 +447,7 @@ def _review_one(ev: dict, nudge: str | None = None) -> None:
             print("Recorded. Decide approve/reject now that you've answered:")
             continue
         else:
-            return  # leaves status as pending_review — shows up again next time
+            return  # leaves status as pending_review - shows up again next time
 
 
 def cmd_review(args) -> int:
@@ -465,7 +465,7 @@ def cmd_review(args) -> int:
 
 def _harness_id(cwd: Path, cfg: dict) -> str:
     """Identity of 'the system': context/skill files + declared model + declared
-    tools. Two runs only count as the same harness if all three match — a tool
+    tools. Two runs only count as the same harness if all three match - a tool
     or model change is as much a harness change as editing CLAUDE.md."""
     h = hashlib.sha256()
     globs = cfg.get("context_globs", [])
@@ -487,12 +487,12 @@ def _harness_id(cwd: Path, cfg: dict) -> str:
 def _harness_label(cfg: dict) -> str:
     """Human-facing name for the current harness. Prefers the user's declared
     version + note; falls back to the raw model/tools description. A content
-    hash alone can't express 'v3 beat v2' — ordering and intent have to be
+    hash alone can't express 'v3 beat v2' - ordering and intent have to be
     declared, not derived."""
     version = cfg.get("harness_version") or ""
     note = cfg.get("harness_note") or ""
     if version:
-        return f"{version} — {note}" if note else version
+        return f"{version} - {note}" if note else version
     model = cfg.get("model") or "unspecified"
     tools = ",".join(cfg.get("tools") or []) or "unspecified"
     return f"model={model} tools={tools}"
@@ -524,7 +524,7 @@ def cmd_harness(args) -> int:
             "declared_at": time.time(),
         })
     write_json(eh_path(CONFIG_FILE), cfg)
-    print(f"Harness is now {args.version} ({hid})" + (f" — {args.note}" if args.note else ""))
+    print(f"Harness is now {args.version} ({hid})" + (f" - {args.note}" if args.note else ""))
     return 0
 
 
@@ -572,7 +572,7 @@ def _execute_eval(cwd: Path, cfg: dict, ev: dict, commit: str | None) -> dict:
 #
 #   regression (_execute_eval): run success_command against the current tree.
 #     Answers "is the repo still green". Changing CLAUDE.md cannot affect this
-#     — the fix is already committed — so it says nothing about harness quality.
+#     - the fix is already committed - so it says nothing about harness quality.
 #
 #   attempt (below): check out starting_commit into a worktree (the fix is NOT
 #     there), hand the agent input_prompt, let it do the work, THEN grade.
@@ -581,7 +581,7 @@ def _execute_eval(cwd: Path, cfg: dict, ev: dict, commit: str | None) -> dict:
 #
 # evalharness makes no LLM calls, so it can't drive the agent itself. It sets
 # the stage (start_attempt) and grades (grade_attempt); the calling agent does
-# the work in between — same split as check/decide.
+# the work in between - same split as check/decide.
 
 ATTEMPTS_FILE = "attempts.json"
 
@@ -601,7 +601,7 @@ def start_attempt(cwd: Path, cfg: dict, ev: dict) -> dict:
     """
     if not ev.get("input_prompt"):
         raise RuntimeError(
-            f"{ev['eval_id']} has no input_prompt — an attempt needs a task statement to give "
+            f"{ev['eval_id']} has no input_prompt - an attempt needs a task statement to give "
             "the agent. Set one via `decide`/`review` (or the MCP `decide` tool) first."
         )
     attempt_id = short_id("att")
@@ -615,7 +615,7 @@ def start_attempt(cwd: Path, cfg: dict, ev: dict) -> dict:
             src = cwd / src
         if not src.exists():
             raise RuntimeError(
-                f"{ev['eval_id']}'s context snapshot is missing at {src} — re-import it."
+                f"{ev['eval_id']}'s context snapshot is missing at {src} - re-import it."
             )
         shutil.copytree(src, wt)
     else:
@@ -675,11 +675,11 @@ def grade_attempt(cwd: Path, cfg: dict, attempt_id: str, keep_workspace: bool = 
 
     wt = Path(att["workspace"])
     if not wt.exists():
-        raise RuntimeError(f"Attempt workspace {wt} is gone — cannot grade.")
+        raise RuntimeError(f"Attempt workspace {wt} is gone - cannot grade.")
 
     if not att["success_command"]:
         raise RuntimeError(
-            f"{att['eval_id']} has no success_command — nothing to grade against. "
+            f"{att['eval_id']} has no success_command - nothing to grade against. "
             "Imported CVDP problems need a grading command (see `evalctl import-cvdp` notes on "
             "Docker/osvb grading) or a locally-defined one before they can be scored."
         )
@@ -697,7 +697,7 @@ def grade_attempt(cwd: Path, cfg: dict, attempt_id: str, keep_workspace: bool = 
         "harness_version": att.get("harness_version", ""),
         "commit": att.get("starting_commit", ""),
         "verdict": verdict,
-        "mode": "attempt",  # the agent actually did the work — this measures the harness
+        "mode": "attempt",  # the agent actually did the work - this measures the harness
         "duration_sec": round(duration, 2),
         "output_tail": output_tail,
         "solution_diff": _cap_diff(solution_diff),
@@ -722,8 +722,8 @@ def grade_attempt(cwd: Path, cfg: dict, attempt_id: str, keep_workspace: bool = 
 #
 # Imports NVIDIA's CVDP benchmark problems as eval DEFINITIONS. Ships no data:
 # you supply the dataset JSONL (same posture as SiliconCrew's cvdp-pipeline,
-# which states "contains no CVDP data — reads a dataset JSONL you supply").
-# Cost of this step is zero — no agent runs, no Docker. Grading imported
+# which states "contains no CVDP data - reads a dataset JSONL you supply").
+# Cost of this step is zero - no agent runs, no Docker. Grading imported
 # problems faithfully needs the reference container (see README, Tier 2).
 #
 # CVDP row schema (verified against the HF datasets-server):
@@ -742,7 +742,7 @@ def _cvdp_eval_id(problem_id: str) -> str:
     """Normalize a CVDP problem id to a stable eval_id.
 
     Both sources must agree so a dataset import and a baseline import land on
-    the SAME eval — that's what lets you see 'SiliconCrew PASSed this, my
+    the SAME eval - that's what lets you see 'SiliconCrew PASSed this, my
     harness FAILed it' side by side instead of two disconnected records.
       dataset:  cvdp_agentic_AES_encryption_decryption_0003
       manifest: AES_encryption_decryption_0003
@@ -819,7 +819,7 @@ def import_cvdp(cwd: Path, dataset: Path, limit: int = 0, ids: list | None = Non
             "starting_commit": "",
             "type": _infer_type(targets) if targets else _infer_type(list(context.keys())),
             "summary": f"{pid} ({_cvdp_difficulty(cats)})",
-            "purpose": f"CVDP benchmark problem {pid} — external calibration point, not homegrown.",
+            "purpose": f"CVDP benchmark problem {pid} - external calibration point, not homegrown.",
             "input_prompt": row.get("prompt", ""),
             "task_text": row.get("prompt", ""),
             "system_message": row.get("system_message", ""),
@@ -837,7 +837,7 @@ def import_cvdp(cwd: Path, dataset: Path, limit: int = 0, ids: list | None = Non
             "comments": [],
             "tags": ["cvdp", _cvdp_difficulty(cats)],
             # Without a grading command these are browsable/attemptable but not
-            # scorable — keep them out of the score rather than faking a verdict.
+            # scorable - keep them out of the score rather than faking a verdict.
             "status": "approved" if success_command else "needs_grading",
             "created_at": time.time(),
         }
@@ -858,7 +858,7 @@ def import_baseline(cwd: Path, manifest: Path, label: str = "SiliconCrew CVDP ba
     These runs were produced by someone else's harness (SiliconCrew's agent +
     model + MCP tools) and graded in the official CVDP reference container.
     They're stamped with a fixed synthetic harness id so they can never be
-    mistaken for — or averaged into — a measurement of YOUR system. They give
+    mistaken for - or averaged into - a measurement of YOUR system. They give
     you an external calibration line at zero cost and zero agent runs.
     """
     records = read_json(manifest, None)
@@ -885,7 +885,7 @@ def import_baseline(cwd: Path, manifest: Path, label: str = "SiliconCrew CVDP ba
 
         ev = by_id.get(eval_id)
         if ev is None:
-            # No dataset import yet — create a reference-only stub. It has no
+            # No dataset import yet - create a reference-only stub. It has no
             # prompt or context, so it is deliberately NOT attemptable; import
             # the real CVDP dataset to make it runnable.
             ev = {
@@ -897,7 +897,7 @@ def import_baseline(cwd: Path, manifest: Path, label: str = "SiliconCrew CVDP ba
                 "type": "other",
                 "summary": f"{pid} ({rec.get('difficulty', 'unknown')})",
                 "purpose": (
-                    f"CVDP problem {pid} — external reference verdict from {label}. "
+                    f"CVDP problem {pid} - external reference verdict from {label}. "
                     "Calibration only; import the CVDP dataset to attempt it yourself."
                 ),
                 "input_prompt": "",
@@ -941,7 +941,7 @@ def import_baseline(cwd: Path, manifest: Path, label: str = "SiliconCrew CVDP ba
             "commit": "",
             "verdict": verdict,
             # SiliconCrew's agent solved each problem from scratch and it was
-            # container-graded — that is a genuine attempt, not a regression.
+            # container-graded - that is a genuine attempt, not a regression.
             "mode": "attempt",
             "duration_sec": round((rec.get("duration_ms") or 0) / 1000, 2),
             "output_tail": "",
@@ -986,13 +986,13 @@ def cmd_import_baseline(args) -> int:
         print(f"Nothing new to import (skipped {res['skipped']} already present).")
         return 0
     pct = 100 * res["passed"] / res["runs"]
-    print(f"Imported {res['runs']} reference verdict(s) — {res['passed']}/{res['runs']} PASS ({pct:.0f}%)")
+    print(f"Imported {res['runs']} reference verdict(s) - {res['passed']}/{res['runs']} PASS ({pct:.0f}%)")
     print(f"  {res['created']} new eval stub(s) created" + (f", {res['skipped']} skipped" if res["skipped"] else ""))
     for d in ("easy", "medium", "hard", "unknown"):
         b = res["by_difficulty"].get(d)
         if b:
             print(f"  {d:8s} {b['passed']}/{b['total']} ({100*b['passed']/b['total']:.0f}%)")
-    print(f"\nSource: {res['label']} — {SILICONCREW_URL}")
+    print(f"\nSource: {res['label']} - {SILICONCREW_URL}")
     print("These are an EXTERNAL reference: produced by SiliconCrew's harness, not yours.")
     print("They give you a calibration line; they will not move when you change your own harness.")
     return 0
@@ -1006,7 +1006,7 @@ def cmd_import_cvdp(args) -> int:
         dataset = (cwd / dataset).resolve()
     if not dataset.exists():
         print(f"Dataset not found: {dataset}\n\n"
-              "evalctl ships no CVDP data — obtain the JSONL from NVIDIA's CVDP benchmark\n"
+              "evalctl ships no CVDP data - obtain the JSONL from NVIDIA's CVDP benchmark\n"
               "distribution and pass its path with --dataset.", file=sys.stderr)
         return 1
 
@@ -1025,7 +1025,7 @@ def cmd_import_cvdp(args) -> int:
     if by_diff:
         print("  " + "  ".join(f"{k}: {v}" for k, v in sorted(by_diff.items())))
     if n and not args.success_command:
-        print("\nThese are imported as `needs_grading` — they have prompts and context you can\n"
+        print("\nThese are imported as `needs_grading` - they have prompts and context you can\n"
               "browse and attempt, but no grading command, so they do not count toward your score.\n"
               "A faithful CVDP verdict needs the reference container (Docker + ghcr.io/hdl/sim/osvb).\n"
               "To score them locally with your own command, re-run with --success-command.")
@@ -1096,8 +1096,8 @@ def _suite_stats(runs: list[dict], evals_by_id: dict, current_harness: str) -> d
     """Score + consistency for one suite's runs.
 
     Two distinct numbers, deliberately not conflated:
-      - pass rate: latest verdict per eval — "where do I stand right now"
-      - consistency: passed/total across an eval's FULL run history — "does
+      - pass rate: latest verdict per eval - "where do I stand right now"
+      - consistency: passed/total across an eval's FULL run history - "does
         this eval behave the same way every time". For CVDP (N samples in one
         pass) this is literally Pass@k; for local evals (runs accumulated
         across weeks of harness changes) it's stability over time. Same
@@ -1138,7 +1138,7 @@ def _suite_stats(runs: list[dict], evals_by_id: dict, current_harness: str) -> d
             "harness_id": r["harness_id"],
             "harness_label": r.get("harness_label", r["harness_id"]),
             "reference": is_ref,
-            # An external reference is not "stale" — it's from another system
+            # An external reference is not "stale" - it's from another system
             # entirely and is never expected to match your current harness.
             "stale": (not is_ref) and r["harness_id"] != current_harness,
             "duration_sec": r["duration_sec"],
@@ -1195,7 +1195,7 @@ def _compute_scoreboard(cwd: Path, cfg: dict) -> dict | None:
     def suite_of(r: dict) -> str:
         return evals_by_id.get(r["eval_id"], {}).get("suite", "local")
 
-    # Local and CVDP are scored identically but reported separately — never
+    # Local and CVDP are scored identically but reported separately - never
     # blended. Divergence between them is the overfitting signal.
     suites = {}
     for suite_name in ("local", "cvdp"):
@@ -1227,7 +1227,7 @@ def _print_score(cwd: Path, cfg: dict) -> None:
     if board is None:
         print("No runs recorded yet.")
         return
-    # label already embeds the version when one is declared — don't print it twice
+    # label already embeds the version when one is declared - don't print it twice
     print(f"Harness: {board['current_harness_label']}  ({board['current_harness']})")
     for suite_name, s in board["suites"].items():
         o = s["overall"]
@@ -1239,7 +1239,7 @@ def _print_score(cwd: Path, cfg: dict) -> None:
               f" (over {s['consistency_sample']} eval(s); {s['insufficient_history']} need more runs)"
               f"{ref_note}")
         if len(s["by_type"]) > 1:
-            print("  by type — " + "  ".join(
+            print("  by type - " + "  ".join(
                 f"{t}: {b['passed']}/{b['total']}" for t, b in sorted(s["by_type"].items())
             ))
         # Own evals first and in full; reference rows are a calibration line,
@@ -1256,7 +1256,7 @@ def _print_score(cwd: Path, cfg: dict) -> None:
         if ref:
             rp = sum(1 for r in ref if r["verdict"] == "PASS")
             label = next((r["harness_label"] for r in ref if r["harness_label"]), "external")
-            print(f"  reference: {rp}/{len(ref)} PASS ({100*rp/len(ref):.0f}%) — {label}")
+            print(f"  reference: {rp}/{len(ref)} PASS ({100*rp/len(ref):.0f}%) - {label}")
 
 
 def cmd_score(args) -> int:
@@ -1268,11 +1268,11 @@ def cmd_score(args) -> int:
 
 def cmd_check(args) -> int:
     """One-shot: capture -> propose -> review -> record score. This is the
-    everyday entrypoint — run it right after you verify a real change."""
+    everyday entrypoint - run it right after you verify a real change."""
     cwd = Path.cwd()
     cfg_path = eh_path(CONFIG_FILE)
     if not cfg_path.exists():
-        print("First time in this repo — quick one-time setup:\n")
+        print("First time in this repo - quick one-time setup:\n")
         init_args = argparse.Namespace(
             repo_name=None,
             success_command=args.cmd,
@@ -1301,13 +1301,13 @@ def cmd_check(args) -> int:
         print(capture["output_tail"])
 
     if not capture["diff_present"]:
-        print("\nNo code changes since the last commit — nothing new to turn into an eval.")
+        print("\nNo code changes since the last commit - nothing new to turn into an eval.")
         print()
         _print_score(cwd, cfg)
         return 0 if verdict == "PASS" else 1
 
     ev = _propose_from_capture(cwd, cfg, capture)
-    print(f"\nThis change looks eval-worthy — starting commit {ev['starting_commit'][:10]}:")
+    print(f"\nThis change looks eval-worthy - starting commit {ev['starting_commit'][:10]}:")
     _review_one(ev, nudge=_nudge_for(cwd, ev))
     evals = read_evals()
     evals.append(ev)
@@ -1326,9 +1326,9 @@ def cmd_check(args) -> int:
             "timestamp": time.time(),
         }
         append_jsonl(eh_path(RUNS_FILE), run_record)
-        print(f"\nSaved as {ev['eval_id']} — future `evalctl check`/`evalctl replay` runs will track it.")
+        print(f"\nSaved as {ev['eval_id']} - future `evalctl check`/`evalctl replay` runs will track it.")
     else:
-        print(f"\n{ev['eval_id']} not approved (status={ev['status']}) — not added to your regression set.")
+        print(f"\n{ev['eval_id']} not approved (status={ev['status']}) - not added to your regression set.")
 
     print()
     _print_score(cwd, cfg)
@@ -1336,19 +1336,19 @@ def cmd_check(args) -> int:
 
 
 def cmd_replay(args) -> int:
-    """Re-run every approved eval against the current tree — use this after
+    """Re-run every approved eval against the current tree - use this after
     you change context/skill files to see if the score actually moved."""
     cwd = Path.cwd()
     cfg = load_config()
     evals = read_evals()
-    # Reference/imported evals with no success_command can't be re-run — an
+    # Reference/imported evals with no success_command can't be re-run - an
     # empty shell command exits 0 and would score a bogus PASS.
     approved = [e for e in evals if e["status"] == "approved" and e.get("success_command")]
     skipped = sum(1 for e in evals if e["status"] == "approved" and not e.get("success_command"))
     if not approved:
-        print("No runnable approved evals yet — run `evalctl check \"<cmd>\"` on some real work first.")
+        print("No runnable approved evals yet - run `evalctl check \"<cmd>\"` on some real work first.")
         if skipped:
-            print(f"({skipped} approved eval(s) have no success command — reference/imported entries aren't replayable.)")
+            print(f"({skipped} approved eval(s) have no success command - reference/imported entries aren't replayable.)")
         return 0
     print(f"Replaying {len(approved)} eval(s) against the current tree"
           + (f" ({skipped} reference eval(s) skipped)" if skipped else "") + "...\n")
@@ -1356,7 +1356,7 @@ def cmd_replay(args) -> int:
         try:
             run_record = _execute_eval(cwd, cfg, ev, commit=None)
         except RuntimeError as exc:
-            print(f"  {ev['eval_id']}: ERROR — {exc}")
+            print(f"  {ev['eval_id']}: ERROR - {exc}")
             continue
         append_jsonl(eh_path(RUNS_FILE), run_record)
         print(f"  {ev['eval_id']:12s} -> {run_record['verdict']} ({run_record['duration_sec']:.1f}s)")
@@ -1672,7 +1672,7 @@ DATA.suites.forEach(s => {
         'reference baseline (not your harness).</div>'
       : '') +
     (s.attempt_backed ? '' :
-      '<div class="hint" style="margin-top:10px;color:var(--yellow)">No attempt-backed runs — ' +
+      '<div class="hint" style="margin-top:10px;color:var(--yellow)">No attempt-backed runs - ' +
       'these are regression results, which do not measure harness quality.</div>');
   suitesEl.appendChild(d);
 });
@@ -1711,7 +1711,7 @@ if (trend.length < 1) {
     c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', 4);
     c.setAttribute('class', 'trend-pt');
     const ti = document.createElementNS(NS, 'title');
-    ti.textContent = (p.t.harness_version || p.t.harness_id) + ' — ' +
+    ti.textContent = (p.t.harness_version || p.t.harness_id) + ' - ' +
                      p.t.passed + '/' + p.t.total + ' (' + Math.round(p.p*100) + '%)' +
                      (p.t.harness_label ? '\\n' + p.t.harness_label : '');
     c.appendChild(ti); svg.appendChild(c);
@@ -1722,7 +1722,7 @@ if (trend.length < 1) {
     svg.appendChild(lb);
   });
   document.getElementById('trend-legend').textContent =
-    trend.length === 1 ? 'Only one harness version recorded so far — change context/skills and replay to see movement.' : '';
+    trend.length === 1 ? 'Only one harness version recorded so far - change context/skills and replay to see movement.' : '';
 }
 
 // ---- filters + list
@@ -1800,15 +1800,15 @@ function render() {
     const did = 'd_' + ev.eval_id;
     det.innerHTML =
       '<div class="field"><label>purpose</label><div class="body">' +
-        (ev.purpose ? esc(ev.purpose) : '<span class="missing">not set — add one so this eval explains itself later</span>') +
+        (ev.purpose ? esc(ev.purpose) : '<span class="missing">not set - add one so this eval explains itself later</span>') +
       '</div></div>' +
       '<div class="field"><label>input prompt (what an agent must solve)</label><div class="body">' +
         (ev.input_prompt ? esc(ev.input_prompt)
-          : '<span class="missing">not set — required before this eval can be attempted (evalctl attempt)</span>') +
+          : '<span class="missing">not set - required before this eval can be attempted (evalctl attempt)</span>') +
       '</div></div>' +
       (ev.reference
         ? '<div class="field"><label>external reference</label><div class="body">Verdict produced by <b>' +
-          esc(ev.attribution.source || 'another system') + '</b>, not your harness — a calibration point that ' +
+          esc(ev.attribution.source || 'another system') + '</b>, not your harness - a calibration point that ' +
           'will not move when you change your setup.' +
           (ev.attribution.note ? '<br>' + esc(ev.attribution.note) : '') +
           (ev.attribution.url ? '<br><a class="link" href="' + esc(ev.attribution.url) + '" target="_blank">' +
@@ -1823,7 +1823,7 @@ function render() {
         : '') +
       '<div class="field"><label>success command</label><code class="cmd">' +
         (ev.success_command ? esc(ev.success_command)
-          : '<span style="color:var(--yellow)">none — not runnable locally</span>') + '</code></div>' +
+          : '<span style="color:var(--yellow)">none - not runnable locally</span>') + '</code></div>' +
       '<div class="field"><label>code (' + st.files.length + ' file(s), +' + st.added + '/-' + st.removed +
         ', from ' + esc((ev.starting_commit||'').slice(0,10)) + ')</label>' +
         (ev.code_links || []).map(l => '<a class="link" href="' + esc(l.url) + '">' + esc(l.path) + '</a>').join('') +
@@ -1885,10 +1885,10 @@ def cmd_dashboard(args) -> int:
 
 
 def cmd_ask(args) -> int:
-    """Local, deterministic Q&A over your own .evalharness data — keyword
+    """Local, deterministic Q&A over your own .evalharness data - keyword
     routing, not an LLM. Answers only what's derivable from evals/runs/tags
     already on disk. For real natural-language questions, point an agent
-    (e.g. this Claude Code session) at .evalharness/*.json directly — that's
+    (e.g. this Claude Code session) at .evalharness/*.json directly - that's
     where actual understanding should live, not a second model call baked
     into this offline tool."""
     cwd = Path.cwd()
@@ -1903,7 +1903,7 @@ def cmd_ask(args) -> int:
         return 1
 
     if board is None:
-        print("No runs recorded yet — nothing to ask about. Run `evalctl check \"<cmd>\"` first.")
+        print("No runs recorded yet - nothing to ask about. Run `evalctl check \"<cmd>\"` first.")
         return 0
 
     if any(w in question for w in ("fail", "broken", "red")):
@@ -1918,7 +1918,7 @@ def cmd_ask(args) -> int:
 
     if any(w in question for w in ("trend", "improve", "history", "over time")):
         if not board["trend"]:
-            print("Not enough history yet — run `evalctl replay` after a harness change.")
+            print("Not enough history yet - run `evalctl replay` after a harness change.")
         else:
             for t in board["trend"]:
                 pct = 100 * t["passed"] / t["total"] if t["total"] else 0
@@ -1933,7 +1933,7 @@ def cmd_ask(args) -> int:
             for tag in e.get("tags", []):
                 tagged.setdefault(tag, []).append(e["eval_id"])
         if not tagged:
-            print("No evals tagged yet — use [t]ag during `evalctl check` review.")
+            print("No evals tagged yet - use [t]ag during `evalctl check` review.")
         else:
             for tag, ids in sorted(tagged.items()):
                 print(f"  {tag}: {', '.join(ids)}")
@@ -1970,7 +1970,7 @@ def cmd_ask(args) -> int:
         return 0
 
     print("Not sure how to answer that locally. I understand: score / failing / trend / tags / category <name> / eval <id>.")
-    print("For anything else, ask the agent you're running this alongside — point it at .evalharness/*.json.")
+    print("For anything else, ask the agent you're running this alongside - point it at .evalharness/*.json.")
     return 0
 
 
@@ -2034,7 +2034,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_base = sub.add_parser(
         "import-baseline",
-        help="Import already-graded CVDP verdicts (e.g. SiliconCrew's FINAL_MANIFEST.json) as an external reference line. Free — no agent runs.",
+        help="Import already-graded CVDP verdicts (e.g. SiliconCrew's FINAL_MANIFEST.json) as an external reference line. Free - no agent runs.",
     )
     p_base.add_argument("--manifest", required=True, help="Path to a bench-orchestrator FINAL_MANIFEST.json.")
     p_base.add_argument("--label", default="SiliconCrew CVDP baseline", help="Name for this reference harness.")

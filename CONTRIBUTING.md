@@ -1,6 +1,6 @@
 # Contributing
 
-Small tool, few rules. The rules that exist are load-bearing — please don't
+Small tool, few rules. The rules that exist are load-bearing - please don't
 break them casually.
 
 ## Hard constraints
@@ -19,7 +19,7 @@ Same reason. Concretely:
 - No `match` statements, no `X | Y` at runtime (only in annotations), no
   `tomllib`, no `itertools.pairwise`, no PEP 646/695 syntax.
 - This is also why `mcp_server.py` hand-rolls JSON-RPC over stdio instead of
-  using the official `mcp` SDK — that SDK requires Python 3.10+. Do not
+  using the official `mcp` SDK - that SDK requires Python 3.10+. Do not
   "simplify" it by adding the SDK.
 
 **3. Zero network calls in core functionality.**
@@ -64,6 +64,6 @@ python3 mcp_test_client.py /path/to/some/repo
 
 ## Data compatibility
 
-Records in `.evalharness/` are long-lived — people accumulate them over weeks.
+Records in `.evalharness/` are long-lived - people accumulate them over weeks.
 If you change the eval schema, extend `migrate_eval()` in `evalctl.py` so old
 records keep loading instead of writing a migration script.

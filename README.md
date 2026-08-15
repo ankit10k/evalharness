@@ -1,369 +1,613 @@
-# evalharness — `evalctl` `[•_•] EvalScout`
+# evalharness
 
-Turn your real work into evals, then measure whether your **harness** is
-actually improving.
+**Measure whether your AI coding setup is actually getting better.**
 
-"Harness" here means the whole system you code with: your context files
-(`CLAUDE.md`, skill docs, specs), your model, and your tools/MCP servers. Most
-people change those constantly and have no idea whether any of it helped.
-evalharness gives you a number, tracked over named versions.
+`[•_•] EvalScout`
 
-Stdlib-only Python. No dependencies, no `pip install`, no server, no account.
-**Core functionality makes zero network calls** — no telemetry, no analytics,
-no update checks. Everything lives in a `.evalharness/` directory inside the
-repo you point it at. Nothing leaves your machine unless you send it yourself.
-That matters if your RTL is proprietary.
+Stdlib-only Python. No dependencies, no server, no account, no network calls.
+Everything stays on your machine.
 
 ---
 
-## The one concept you must not skip: attempt vs regression
+## Table of contents
 
-There are two completely different things you can measure, and confusing them
-is the main way people fool themselves.
-
-**Regression** — `evalctl replay`, `evalctl run <eval_id>`
-
-> Re-runs an eval's `success_command` against the **current tree**, where the
-> fix already exists.
-
-This tells you the repo is still green. It says **nothing** about your harness.
-Editing `CLAUDE.md` cannot change the result, because the code is already
-fixed. Useful for catching breakage; useless for measuring whether your system
-got better.
-
-**Attempt** — `evalctl attempt <eval_id>` → do the work → `evalctl grade <attempt_id>`
-
-> Checks out the **original pre-fix state** into an isolated worktree (the fix
-> is *not* there), hands the agent the eval's `input_prompt`, lets it solve the
-> task from scratch, then runs the success command and records the verdict.
-
-This is the measurement that actually moves when your harness changes. Same
-shape as a real benchmark: (prompt, context, harness) → verdict. Runs are
-stamped `mode=attempt` so you can tell them apart forever.
-
-Rule of thumb: *"is my repo healthy?"* → `replay`. *"is my system getting
-better?"* → `attempt` + `grade`. The dashboard warns you in yellow when a
-suite has no attempt-backed runs at all.
-
-evalharness never calls an LLM itself. It sets the stage (`attempt`) and grades
-(`grade`); your agent does the work in between.
+- [What is this?](#what-is-this)
+- [Why you need it](#why-you-need-it)
+- [How it works](#how-it-works)
+- [Setup](#setup)
+- [Quick start](#quick-start)
+- [The dashboard](#the-dashboard)
+- [Command reference](#command-reference)
+- [Using it with a coding agent (MCP)](#using-it-with-a-coding-agent-mcp)
+- [CVDP benchmark support](#cvdp-benchmark-support)
+- [SiliconCrew integration](#siliconcrew-integration)
+- [FAQ](#faq)
+- [Giving feedback](#giving-feedback)
+- [License and attribution](#license-and-attribution)
 
 ---
 
-## Score vs consistency
+## What is this?
 
-Two numbers, deliberately never merged:
+You use an AI coding agent (Claude Code, Cursor, Codex, or similar). Over time
+you tune how it works: you write a `CLAUDE.md`, add skill documents, connect
+MCP tools, switch models. All of that together is what we call your **harness**.
 
-- **score** — the **latest** verdict for each eval, summed. "Where do I stand
-  right now."
-- **consistency** — `passed / total` across an eval's **entire run history**.
-  "Does this behave the same way every time." Shown as `n/a` until an eval has
-  at least 2 runs, because 100% off a single run is noise.
+Here is the problem: you have no idea whether any of it helps.
 
-If you repeatedly `attempt` the same eval under the same harness, consistency
-is effectively **Pass@k** — how reliably your system solves that task, not
-whether it got lucky once. If you accumulate runs across weeks of harness
-changes, it reads as stability over time instead. Same formula either way.
+You add a document explaining your codebase conventions. Does the agent
+actually produce better code now? You switch models. Better or worse? You
+connect a new tool. Did that move the needle, or just add noise?
+
+Most people answer this with vibes. evalharness answers it with a number.
+
+It works in two steps:
+
+1. **It captures your real work.** When you fix a bug and verify the fix, the
+   tool quietly records it: the starting code, the task, and the command that
+   proves it works. That becomes an *eval*.
+2. **It replays that work against your current setup.** It rewinds your repo to
+   the state before you fixed the bug, hands the task to your agent, lets the
+   agent solve it from scratch, then checks the result. Do this across a set of
+   evals and you have a score. Change your harness, run it again, and you can
+   see whether the score moved.
+
+No synthetic benchmarks. No writing test cases by hand. The evals come from
+work you were already doing.
 
 ---
 
-## Two suites, never blended
+## Why you need it
 
-| suite | what's in it |
+**You are flying blind.** Prompt engineering and context engineering are
+guesswork without measurement. A document that feels helpful may do nothing.
+A change that seems minor may help a lot. You cannot tell without evidence.
+
+**Your data never leaves your machine.** If you work on proprietary RTL, source
+code, or anything under NDA, you cannot upload it to a benchmarking service.
+evalharness runs entirely locally, makes zero network calls, and stores
+everything in a `.evalharness/` folder inside your own repo.
+
+**It works with any toolchain.** evalharness has no idea what a simulator is.
+You give it a shell command that proves your work is correct. That can be
+`make test`, `pytest`, `iverilog ... && vvp ...`, Verilator, a Synopsys or
+Cadence flow script, or anything else. If it exits `0`, it passed.
+
+**It catches overfitting.** Tune your context files enough and you will make
+them fit your own repo's quirks rather than making the agent genuinely better.
+evalharness tracks your own evals and public benchmark problems as two separate
+scores, so you can see when one improves while the other does not.
+
+---
+
+## How it works
+
+### The one concept that matters: attempt vs regression
+
+There are two very different things you can measure. Confusing them is the
+main way people fool themselves.
+
+**Regression** (`evalctl replay`)
+
+Re-runs an eval's success command against your **current** code, where the fix
+already exists.
+
+This tells you the repo still works. It says nothing about your harness.
+Editing `CLAUDE.md` cannot change the outcome, because the code is already
+fixed. Useful for catching breakage. Useless for measuring your setup.
+
+**Attempt** (`evalctl attempt` then `evalctl grade`)
+
+Checks out the **original, pre-fix** code into an isolated workspace, hands
+your agent the task, lets it solve the problem from scratch, then runs the
+success command and records the verdict.
+
+This is the measurement that actually moves when your harness changes.
+
+> **Rule of thumb:** "Is my repo healthy?" use `replay`. "Is my setup getting
+> better?" use `attempt` and `grade`.
+
+evalharness never calls an AI model itself. It prepares the workspace and
+grades the outcome. Your agent does the work in between.
+
+### Two numbers: score and consistency
+
+| Metric | Meaning |
 |---|---|
-| `local` | evals captured from **your own** verified work |
-| `cvdp` | imported NVIDIA CVDP benchmark problems, and/or external reference verdicts |
+| **Score** | The latest verdict for each eval. "Where do I stand right now." |
+| **Consistency** | Passed divided by total across an eval's whole run history. "Does this behave the same way every time." |
 
-They are scored identically but reported separately, on purpose. If a harness
-change lifts `local` but leaves `cvdp` flat, that's an **overfitting signal**:
-you tuned your context files to your own repo's quirks rather than to general
-capability. Blending the two into one number would hide exactly the thing you
-most want to see.
+Consistency shows `n/a` until an eval has at least 2 runs, because 100 percent
+off a single run is noise, not information.
 
-External reference verdicts (imported from someone else's graded runs) are
-stamped with a fixed synthetic harness id. They show as a calibration line and
-are never counted as a measurement of *your* system — and they're never marked
-"stale", because they were never yours to refresh.
+If you attempt the same eval several times under one harness, consistency is
+effectively **Pass@k**: how reliably your setup solves that task rather than
+whether it got lucky once.
 
----
+### Harness versions
 
-## Requirements
+Your harness gets a content hash covering your context files, declared model,
+and declared tools. Change any of them and the hash changes, so silent drift
+gets detected even if you forget to record it.
 
-- **Python 3.9+** (stdlib only)
-- **git**
-- **whatever build/sim/EDA command you already use** to verify your own work
-
-Explicitly toolchain-agnostic. `make regression`, `iverilog … && vvp …`,
-Verilator, a Synopsys or Cadence flow script, cocotb, a Python unit test — it
-does not matter, because the success command is always your own string, run
-through your own shell. evalharness has no idea what a simulator is.
-
-Docker is **not** required. It is only mentioned in the optional CVDP Tier-2
-path below.
-
----
-
-## Quickstart
-
-```bash
-git clone <your-fork-url> evalharness
-cd /path/to/your/repo
-
-# optional convenience alias
-echo "alias evalctl='python3 /abs/path/to/evalharness/evalctl.py'" >> ~/.zshrc
-source ~/.zshrc
-```
-
-**1. Initialize** (once per repo). Asks for your success command, context/skill
-globs, model, and tools:
-
-```bash
-evalctl init
-```
-
-**2. Do real work.** Fix a bug, write a testbench, whatever you were going to
-do anyway.
-
-**3. Capture it.** Run your normal verification command *through* `check`
-instead of directly:
-
-```bash
-evalctl check "<your test cmd>" --prompt "<the task you were solving>"
-```
-
-`check` runs the command, notices you changed real code, infers a candidate
-eval (diffstat, not a diff dump), flags files that have come up in prior evals,
-and asks approve / edit / reject / tag / prompt / comment / type / diff / skip.
-
-**Pass `--prompt`.** It's stored as `input_prompt`, and without it the eval can
-never be `attempt`ed — you'd have a regression test and nothing more. `check`
-prints a yellow warning when it's missing.
-
-**4. Measure the harness.** Pick an eval and make the agent redo it from
-scratch:
-
-```bash
-evalctl attempt eval_a1b2c3d4      # prints an isolated pre-fix workspace + the task
-# ... your agent solves the task inside that workspace ...
-evalctl grade att_5e6f7a8b         # runs the success command there, records mode=attempt
-```
-
-Repeat on the same eval a few times to get a consistency / Pass@k number.
-
-**5. Name your harness version** whenever you change context files, skills,
-tools, or model:
+You can also give versions readable names:
 
 ```bash
 evalctl harness v2 "added cache-debug skill doc"
-evalctl harness                     # show current + full history
 ```
 
-The harness id itself is a content hash of everything matching `context_globs`
-plus your declared model and tools — so silent drift is detected even if you
-forget to bump the version. The version label just makes the trend readable as
-v1 → v2 → v3 instead of opaque hashes.
+That turns your trend chart into `v1 -> v2 -> v3` instead of a row of opaque
+hashes.
 
-**6. Look at the number.**
+---
+
+## Setup
+
+### Requirements
+
+- **Python 3.9 or newer** (standard library only, nothing to install)
+- **git**
+- **Whatever command you already use to verify your work**
+
+Docker is not required. It appears only in the optional CVDP grading path
+described later.
+
+### Install
 
 ```bash
-evalctl score        # terminal: per-suite score, consistency, by-type breakdown
-evalctl dashboard    # local one-page web app, no server — opens in your browser
+git clone https://github.com/ankit10k/evalharness.git
 ```
 
-The dashboard shows suite cards, a trend line across harness versions, and every
-eval as a clickable row that expands into its diff, prompt, success command,
-tags, comments, and full run history (with each run's mode and solution diff).
-It's written to `.evalharness/dashboard.html` and regenerated on every
-check/decide/replay, so it's never stale.
+That is the whole installation. There is no build step and no package to
+install.
+
+Optionally, add a shortcut so you can type `evalctl` anywhere:
+
+```bash
+echo "alias evalctl='python3 /absolute/path/to/evalharness/evalctl.py'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+Use `~/.bashrc` instead if you use bash. The rest of this guide assumes the
+alias exists.
+
+---
+
+## Quick start
+
+### Step 1: Initialize inside the repo you work in
+
+```bash
+cd /path/to/your/project
+evalctl init
+```
+
+It asks four questions:
+
+| Question | What to answer | Example |
+|---|---|---|
+| Success command | The command that proves your work is correct | `make test` |
+| Context globs | Files that make up your harness | `CLAUDE.md,skills/**` |
+| Model | Which model you use | `claude-sonnet-5` |
+| Tools | MCP servers or tools available to your agent | `rtl-codex` |
+
+This creates `.evalharness/config.json` and adds `.evalharness/` to your
+`.gitignore`.
+
+### Step 2: Do real work
+
+Fix a bug. Add a feature. Write a testbench. Whatever you were going to do
+anyway. No change to your workflow.
+
+### Step 3: Capture it
+
+When you would normally run your test to confirm the work, run it through
+`check` instead:
+
+```bash
+evalctl check "make test" --prompt "Fix the FIFO overflow when depth is 1"
+```
+
+`check` runs your command, notices you changed real code, and proposes an eval.
+It shows you a summary and asks what to do:
+
+```
+eval_a1b2c3d4  [rtl]  Fix FIFO overflow (rtl/fifo.sv)
+  rtl/fifo.sv  (+4/-2)  commit 8a31f2c9de
+  success: make test
+  prompt: Fix the FIFO overflow when depth is 1
+  [a]pprove / [e]dit / [r]eject / [t]ag / [p]rompt / [c]omment / [y]pe / [d]iff / [s]kip?
+```
+
+Press `a` to keep it.
+
+> **Always pass `--prompt`.** It is stored as the task statement. Without it the
+> eval can never be attempted, and you are left with a plain regression test.
+
+### Step 4: Measure your harness
+
+Pick an eval and make your agent redo it from scratch:
+
+```bash
+evalctl attempt eval_a1b2c3d4
+```
+
+This prints an isolated workspace path and the task. The workspace contains
+your code **before** the fix.
+
+Let your agent solve the task in that workspace. Then grade it:
+
+```bash
+evalctl grade att_5e6f7a8b
+```
+
+You get `PASS` or `FAIL`. Repeat a few times on the same eval to build a
+consistency number.
+
+### Step 5: Change something, then measure again
+
+Edit your `CLAUDE.md`, add a skill document, or switch models. Record the new
+version:
+
+```bash
+evalctl harness v2 "added RTL debugging guide"
+```
+
+Run your attempts again. Now compare:
+
+```bash
+evalctl score
+```
+
+```
+Harness: v2 - added RTL debugging guide  (a5f11bcfac5a)
+
+[local] score 4/5 (80%)   consistency 73% (over 5 eval(s); 0 need more runs)
+  by type - rtl: 3/3  testbench: 1/2
+```
+
+That difference between v1 and v2 is the thing you could not see before.
+
+---
+
+## The dashboard
+
+```bash
+evalctl dashboard
+```
+
+This writes `.evalharness/dashboard.html` and opens it in your browser. It is a
+single static file. There is no server and no network request.
+
+What you get:
+
+- **Suite cards** showing score and consistency for your own evals and for
+  benchmark problems, side by side but never blended into one figure.
+- **A trend chart** plotting your score across every harness version, so
+  improvement or regression is visible at a glance.
+- **Filter chips** for eval type (`rtl`, `testbench`, `architecture`,
+  `synthesis`, `other`) and suite.
+- **Expandable eval rows.** Click any eval to see its purpose, task prompt,
+  success command, links to the touched files, a colour-coded diff, your
+  comment thread, and every run it has ever had with the mode of each run.
+- **A warning banner** when a suite has no attempt-backed runs, because that
+  means the numbers are regression results and do not reflect harness quality.
+
+The dashboard regenerates automatically whenever you approve an eval, replay,
+or check the score, so it never goes stale.
 
 ---
 
 ## Command reference
 
+### Everyday commands
+
 | Command | What it does |
 |---|---|
-| `check "<cmd>" [--prompt "..."]` | **Everyday entrypoint.** Run your command; if it changed real code, propose/review/score an eval in one step. First run also does setup. |
-| `attempt <eval_id>` | **Real eval mode.** Open a pre-fix worktree + task prompt for an agent to solve. |
-| `grade <attempt_id> [--keep]` | Grade an open attempt; records `mode=attempt`. |
-| `replay` | Re-run every approved eval against the current tree. Repo health, *not* harness quality. |
-| `harness [<version> [<note>]]` | Name the current harness state, or show current + history. |
-| `score` | Print per-suite score + consistency, no re-running. |
-| `dashboard [--no-open]` | Build and open the local web scoreboard. |
-| `ask "<question>"` | Local keyword Q&A over your own data — **not** an LLM call. Understands score / failing / trend / tags / `category <name>` / `eval <id>`. |
-| `feedback "<text>"` | Log a free-text note about the tool itself. |
-| `import-baseline --manifest <path>` | Import already-graded CVDP verdicts as an external reference line. Free. |
-| `import-cvdp --dataset <path>` | Import CVDP problems as eval definitions from a JSONL you supply. |
-| `init` | Explicit setup instead of `check`'s first-run prompt. |
-| `wrap "<cmd>"` | (advanced) Capture one command without proposing an eval. |
-| `propose` | (advanced) Turn the last capture into a draft eval. |
-| `review` | (advanced) Work through pending evals interactively. |
-| `run <eval_id> [--commit <sha>]` | (advanced) Replay one eval, optionally against an old commit in a throwaway worktree. |
+| `evalctl init` | One-time setup in a repo |
+| `evalctl check "<cmd>" --prompt "<task>"` | Run your test, capture the work as an eval |
+| `evalctl attempt <eval_id>` | Open a pre-fix workspace for your agent to solve |
+| `evalctl grade <attempt_id>` | Grade a finished attempt |
+| `evalctl harness <version> "<note>"` | Name your current harness version |
+| `evalctl score` | Print score and consistency per suite |
+| `evalctl dashboard` | Build and open the visual dashboard |
 
-Quote commands containing `&&`, `|`, or quotes as a **single argument** —
-otherwise your shell splits them before evalctl ever sees them.
+### Occasional commands
+
+| Command | What it does |
+|---|---|
+| `evalctl replay` | Re-run all evals against current code (repo health only) |
+| `evalctl ask "<question>"` | Local Q and A over your data: `score`, `failing`, `trend`, `tags` |
+| `evalctl feedback "<text>"` | Log a note about the tool itself |
+| `evalctl import-cvdp --dataset <path>` | Import CVDP benchmark problems |
+| `evalctl import-baseline --manifest <path>` | Import already-graded reference verdicts |
+
+### Advanced commands
+
+| Command | What it does |
+|---|---|
+| `evalctl wrap "<cmd>"` | Capture a command without proposing an eval |
+| `evalctl propose` | Turn the last capture into a draft eval |
+| `evalctl review` | Review pending evals one by one |
+| `evalctl run <eval_id>` | Re-run one eval against current code |
+
+Add `--help` to any command for its full options.
 
 ---
 
-## MCP setup
+## Using it with a coding agent (MCP)
 
-`mcp_server.py` exposes the same functionality as MCP tools, so your agent can
-call `check` / `start_attempt` / `grade_attempt` / `score` on its own instead of
-you typing commands. The server is hand-rolled JSON-RPC over stdio — it does
-**not** use the official `mcp` SDK, because that requires Python 3.10+ and would
-break the zero-dependency design.
+evalharness ships an MCP server, so your agent can drive it directly and remind
+you to capture work without you having to remember.
 
-### Claude Code
+### Setup
 
-Copy `.mcp.json.template` from this repo into the **root of the repo you want
-to track**, rename it to `.mcp.json`, and substitute the two placeholders:
+Copy `.mcp.json.template` from this repository into the root of the project you
+want to track, rename it to `.mcp.json`, and fill in the two absolute paths:
 
-```jsonc
+```json
 {
   "mcpServers": {
     "evalharness": {
       "command": "python3",
-      "args": ["<ABSOLUTE_PATH_TO_EVALHARNESS>/mcp_server.py"],
+      "args": ["/absolute/path/to/evalharness/mcp_server.py"],
       "env": {
-        "EVALHARNESS_REPO": "<ABSOLUTE_PATH_TO_YOUR_REPO>"
+        "EVALHARNESS_REPO": "/absolute/path/to/your/project"
       }
     }
   }
 }
 ```
 
-- `<ABSOLUTE_PATH_TO_EVALHARNESS>` — where you cloned this repo.
-- `<ABSOLUTE_PATH_TO_YOUR_REPO>` — the repo whose work you're capturing. This
-  is what tells the server which `.evalharness/` to read and write.
+Restart your agent session. MCP servers load at session start, so a running
+session will not pick up the change.
 
-Both must be **absolute**; the agent launches the server with an unpredictable
-working directory. (You can also pass the repo as `argv[1]` instead of using
-the env var.)
+This works with any MCP-capable agent, not only Claude Code. Cursor and others
+use the same `mcpServers` configuration shape.
 
-**Restart your agent after editing this file.** MCP servers are loaded at
-session start — an already-running session will not pick up the new server.
+### What the agent can do
 
-### Any other MCP-capable agent
+Thirteen tools are available: `check`, `decide`, `start_attempt`,
+`grade_attempt`, `set_harness`, `replay`, `score`, `list_pending`, `get_eval`,
+`import_cvdp`, `import_baseline`, `feedback`, and `init`.
 
-Cursor, Windsurf, Cline, and anything else that speaks MCP use the same
-`mcpServers` config shape — only the file it lives in differs. Point it at
-`python3 <path>/mcp_server.py` with `EVALHARNESS_REPO` set and it works
-identically. Nothing in the server is Claude-specific.
-
-### Optional env vars
-
-| Variable | Effect |
-|---|---|
-| `EVALHARNESS_REPO` | Repo the server operates on (or pass it as `argv[1]`) |
-| `CVDP_DATASET` | Default dataset path for the `import_cvdp` tool |
-| `CVDP_BASELINE_MANIFEST` | Default manifest path for the `import_baseline` tool |
-| `EVALHARNESS_PET_NAME` | Rename the persona (default `EvalScout`) |
-| `EVALHARNESS_PET_ICON` | Change the persona icon (default `[•_•]`) |
+The server tells your agent to call `check` on its own after it verifies real
+work, so eval capture happens without you asking. Every response includes a
+short line from `[•_•] EvalScout` that your agent relays to you in plain
+language.
 
 ### Testing the server without an agent
 
 ```bash
-python3 mcp_test_client.py /path/to/your/repo
+python3 mcp_test_client.py /path/to/your/project
 ```
 
-Launches the server, does the handshake, prints the instructions a real agent
-would load, and gives you a prompt where `check`, `list`, `decide`, `score`,
-`get`, `feedback`, and `raw <tool> <json>` work as plain typed commands.
+This gives you an interactive prompt where you can run `score`, `list`, `check
+<cmd>`, `get <eval_id>`, or `raw <tool> <json>` directly against the server.
+
+### Customising the persona
+
+Set these in the `env` block of your `.mcp.json`:
+
+```json
+"EVALHARNESS_PET_NAME": "Scout",
+"EVALHARNESS_PET_ICON": "(o_o)"
+```
 
 ---
 
-## CVDP: bring your own dataset
+## CVDP benchmark support
 
-evalharness **ships no CVDP data.** No problems, no prompts, no contexts, no
-patches. Same posture as SiliconCrew's own cvdp-pipeline README: *contains no
-CVDP data — reads a dataset JSONL you supply.* The dataset is NVIDIA's and is
-licensed separately; obtaining it and complying with its terms is on you.
+**CVDP** (Comprehensive Verilog Design Problems) is NVIDIA's public benchmark
+for hardware design and verification agents. It contains 749 problems across
+several categories, each with a task prompt, starting context, and a hidden
+test harness that grades the solution.
 
-### The free path — `import-baseline` (recommended first)
+evalharness can work with CVDP in three ways, with very different costs.
 
-If you have an already-graded CVDP results file — a bench-orchestrator
-`FINAL_MANIFEST.json`, e.g. from a SiliconCrew run — you can import its verdicts
-as an external reference line:
+### Option 1: Import problem definitions (free)
 
 ```bash
-evalctl import-baseline --manifest /path/to/bench-orchestrator/final_runs/FINAL_MANIFEST.json
+evalctl import-cvdp --dataset /path/to/cvdp_v1.0.2_agentic_code_generation_no_commercial.jsonl --limit 20
 ```
 
-**Cost: zero.** It reads one local JSON file. No Docker, no container pull, no
-agent runs, no network, no usage burned. You get a real CVDP calibration number
-immediately, broken down by difficulty.
+Reads the dataset and creates eval definitions you can browse and filter. Costs
+nothing, runs no agent, needs no Docker. This solves the cold-start problem: a
+brand new install has something meaningful in it immediately.
 
-Those verdicts are stamped with a fixed synthetic harness id and labelled as an
-external reference throughout the UI, because they were produced by *someone
-else's* harness. They give you a line to compare against; they will not move
-when you change your own setup.
+Useful flags: `--limit`, `--ids`, `--difficulty easy|medium|hard`.
 
-### Importing problems to attempt yourself
+### Option 2: Import an existing graded baseline (free)
+
+If you have a results file from a previous CVDP run, import its verdicts as an
+external reference line:
 
 ```bash
-evalctl import-cvdp --dataset /path/to/cvdp.jsonl --difficulty easy --limit 20
+evalctl import-baseline --manifest /path/to/FINAL_MANIFEST.json
 ```
 
-This imports problems as eval definitions with their prompts and context
-materialized to disk, so you can browse and `attempt` them. Without
-`--success-command` they import as `needs_grading`: attemptable, but kept **out
-of your score** rather than faking a verdict.
+This gives you a real calibration number at zero cost. See the SiliconCrew
+section below for where such a file comes from.
 
-### The expensive path — faithful Tier-2 grading
+### Option 3: Run CVDP problems yourself (expensive)
 
-A faithful CVDP verdict requires the official reference container
-(**Docker + `ghcr.io/hdl/sim/osvb`**, licensed separately, not bundled here)
-plus a real agent run per problem.
+Actually solving CVDP problems with your own agent and grading them in NVIDIA's
+official reference container is the gold standard, but it is costly. Based on
+recorded runs, expect roughly **7 US dollars and 22 minutes per problem** at
+API list prices. A full 92-problem sweep took about 40 hours.
 
-**Be honest with yourself about the cost.** Based on SiliconCrew's recorded
-runs, a Tier-2 CVDP problem costs roughly **$7 median and ~22 minutes per
-problem**. A 50-problem sweep is therefore on the order of several hundred
-dollars and most of a day. That is why `import-baseline` exists and why it's
-the default recommendation: take the free calibration line first, and spend
-real money only on the specific problems you actually care about.
+This path also requires Docker, the `ghcr.io/hdl/sim/osvb` reference image, and
+a working agent setup. If you are on a subscription plan rather than API
+billing, the real constraint is your usage limits rather than money, and a full
+sweep will exhaust them.
+
+Start with options 1 and 2. Reach for option 3 only when you have a specific
+reason.
+
+### You supply the dataset
+
+This repository contains **no CVDP data**. The dataset is licensed by NVIDIA
+and is not redistributed here. Obtain it yourself from NVIDIA's CVDP benchmark
+distribution and pass the path with `--dataset`, or set the `CVDP_DATASET`
+environment variable.
 
 ---
 
-## Feedback (for friends testing this)
+## SiliconCrew integration
 
-Please log friction as you hit it — a one-liner is fine, don't polish it:
+[SiliconCrew](https://siliconcrew-frontend-psp2dkllmq-uc.a.run.app/) is an
+open-source AI hardware design platform by Naman Ranka. It automates RTL
+generation, verification, synthesis, and physical design, and it includes a
+benchmark orchestrator that can run CVDP problems end to end and grade them in
+NVIDIA's official reference container.
+
+Repository: <https://github.com/naman-ranka/siliconcrew> (MIT licensed)
+
+### How evalharness relates to it
+
+**It does not depend on it.** evalharness is standalone and works fully without
+SiliconCrew installed. No SiliconCrew code is bundled or vendored here.
+
+The connection is one optional, read-only adapter. If you have run CVDP through
+SiliconCrew's benchmark orchestrator, it produces a results file at
+`bench-orchestrator/final_runs/FINAL_MANIFEST.json`. evalharness can import
+those verdicts:
 
 ```bash
-evalctl feedback "check picked a confusing task description"
-evalctl feedback "wasn't obvious that replay doesn't measure the harness"
+evalctl import-baseline --manifest /path/to/siliconcrew/bench-orchestrator/final_runs/FINAL_MANIFEST.json
 ```
 
-Then send back:
+You get output like:
 
-- `.evalharness/feedback.jsonl` — the notes above (**this is the one I need**)
-- `.evalharness/evals.json` and `.evalharness/runs.jsonl` — optional, but much
-  more useful; they show what got captured and how it scored
+```
+Imported 92 reference verdict(s) - 60/92 PASS (65%)
+  easy     15/17 (88%)
+  medium   36/55 (65%)
+  hard      9/20 (45%)
+```
 
-**No source code needs to leave your machine.** `evals.json` does contain
-captured diffs of your work, so skim it before sending, or send only
-`feedback.jsonl` if the diffs are sensitive. `runs.jsonl` holds verdicts,
-timings, harness ids, and command output tails.
+### These are reference numbers, not your score
 
-Things I especially want to know: did `check` propose evals that felt worth
-keeping? Did you understand attempt vs replay without reading this README
-twice? Did the score ever move in a way that matched your gut?
+Verdicts imported this way were produced by **SiliconCrew's** harness: its
+agent, its model, its tools. Not yours.
+
+evalharness stamps them with a fixed synthetic harness identifier so they can
+never be averaged into a measurement of your own system. They appear in the
+dashboard with a `reference` badge, they are reported separately in `score`
+output, and they are never marked stale, because they were never yours to
+refresh.
+
+Think of them as a calibration line: a marker of what a known-good hardware
+design agent achieves on a public benchmark, sitting next to your own numbers
+for comparison.
+
+The adapter reads a **file**, not a repository. You do not need SiliconCrew
+checked out anywhere. If you do not have such a file, this one command is
+unavailable and everything else works normally.
 
 ---
 
-## Contributing
+## FAQ
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The short version — these are hard
-constraints, not preferences:
+**Do I need to change how I work?**
 
-- **stdlib only, no dependencies**, ever (must run on locked-down EDA
-  workstations with stock Python)
-- **Python 3.9 compatible** (why the MCP server is hand-rolled instead of using
-  the 3.10+ `mcp` SDK)
-- **zero network calls** in core functionality; no telemetry
-- **ship no third-party data**; read user-supplied paths instead
-- **toolchain-agnostic**; the success command is always the user's own
+No. Do your work as usual. The only difference is running your verification
+command through `evalctl check` instead of directly.
 
-## License
+**Does any of my code leave my machine?**
 
-MIT — see [LICENSE](LICENSE). Third-party attributions (SiliconCrew, NVIDIA
-CVDP, the osvb container image) are in [NOTICE](NOTICE); none of them are
-bundled or redistributed here.
+No. Core functionality makes zero network calls. There is no telemetry, no
+analytics, and no update check. Everything lives in `.evalharness/` inside your
+repo, which the tool adds to your `.gitignore` automatically.
+
+**Does this work for software, or only hardware?**
+
+Any codebase. The tool has no hardware-specific logic. The success command is
+just a shell command, so `pytest`, `npm test`, `cargo test`, and `make` all
+work. Hardware terminology appears in the eval type labels (`rtl`,
+`testbench`, `synthesis`), which is cosmetic.
+
+**Does it need an API key?**
+
+No. evalharness never calls a model. Your agent does the work; this tool
+prepares the workspace and grades the result.
+
+**Why does my score say 100 percent when I have only one eval?**
+
+Because one eval passing is 100 percent of one eval. That is not a meaningful
+signal. Consistency deliberately reports `n/a` until an eval has at least two
+runs, for the same reason. Build up several evals and several runs before
+reading anything into the numbers.
+
+**What is the difference between score and consistency again?**
+
+Score is your latest result. Consistency is how reliably you get that result.
+An eval that passes now but passed only 3 of its last 10 attempts is not
+solid, and score alone would hide that.
+
+**My score did not change after I edited `CLAUDE.md`. Is it broken?**
+
+Check whether you ran `replay` or `attempt`. `replay` re-runs your test against
+already-fixed code, so it cannot change when your harness changes. Only
+`attempt` measures your harness. The dashboard shows a warning when a suite has
+no attempt-backed runs.
+
+**Can I use this with Cursor, Codex, or another agent?**
+
+Yes. The MCP server follows the standard protocol. Any MCP-capable agent can
+connect using the same configuration shape. The CLI works with any agent, or
+with none at all.
+
+**What if my project has no tests?**
+
+You need some command that distinguishes working code from broken code. It does
+not have to be a formal test suite. A build that fails on error, a linter, or a
+script that greps for expected output all work.
+
+**Can my whole team share one set of evals?**
+
+Not yet. Evals live in a gitignored local folder. You could commit
+`.evalharness/` deliberately to share them, but this has not been tested and
+the harness hash is machine-specific, so treat that as unsupported for now.
+
+**How do I delete an eval I no longer want?**
+
+Edit `.evalharness/evals.json` and remove the entry, or set its `status` to
+`rejected`. The files are plain JSON and safe to edit by hand.
+
+---
+
+## Giving feedback
+
+If you are testing this for someone, log friction as you hit it:
+
+```bash
+evalctl feedback "the review prompt options were confusing"
+```
+
+Then send back `.evalharness/feedback.jsonl`.
+
+If you are willing, `.evalharness/evals.json` and `.evalharness/runs.jsonl` are
+also useful. They contain eval metadata, diffs of changes you approved, and
+verdicts. Review them first if your code is sensitive. Your source files are
+never included, and nothing is ever sent automatically.
+
+---
+
+## License and attribution
+
+evalharness is MIT licensed. Copyright (c) 2026 Ankit Kumar. See
+[LICENSE](LICENSE).
+
+Third-party components are documented in [NOTICE](NOTICE). In short:
+
+- **SiliconCrew** (MIT, Copyright (c) 2026 Naman Ranka) is an optional adapter
+  target. No SiliconCrew code is bundled here.
+  <https://github.com/naman-ranka/siliconcrew>
+- **NVIDIA CVDP benchmark dataset** is licensed separately by NVIDIA and is not
+  redistributed here. You supply your own copy.
+- **`ghcr.io/hdl/sim/osvb`** container image is licensed separately and is not
+  bundled. It is needed only for the optional CVDP grading path.
+
+Contributing guidelines, including the constraints that keep this tool
+dependency-free and offline, are in [CONTRIBUTING.md](CONTRIBUTING.md).

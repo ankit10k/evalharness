@@ -3,7 +3,7 @@ NOTICE
 
 evalharness (evalctl)
 Copyright (c) 2026 Ankit Kumar
-Licensed under the MIT License — see LICENSE.
+Licensed under the MIT License - see LICENSE.
 
 evalharness is stdlib-only Python. It bundles no third-party code and no
 third-party data. The items below are things it can *interoperate with* when
@@ -11,7 +11,7 @@ you supply them yourself. Each is licensed separately by its own owner, and
 none of them are redistributed in this repository.
 
 --------------------------------------------------------------------------
-1. SiliconCrew — optional adapter, not vendored, not bundled
+1. SiliconCrew - optional adapter, not vendored, not bundled
 --------------------------------------------------------------------------
     Copyright (c) 2026 Naman Ranka
     License: MIT
@@ -34,7 +34,7 @@ optional; evalharness works standalone without it. You must obtain the
 manifest yourself from your own SiliconCrew run.
 
 --------------------------------------------------------------------------
-2. NVIDIA CVDP benchmark dataset — NOT redistributed
+2. NVIDIA CVDP benchmark dataset - NOT redistributed
 --------------------------------------------------------------------------
     Copyright and license: NVIDIA Corporation, licensed separately by NVIDIA.
 
@@ -48,7 +48,7 @@ terms of use. evalharness only reads the file from your local disk; it never
 downloads it.
 
 --------------------------------------------------------------------------
-3. ghcr.io/hdl/sim/osvb container image — NOT bundled
+3. ghcr.io/hdl/sim/osvb container image - NOT bundled
 --------------------------------------------------------------------------
     Licensed separately by its own maintainers.
 

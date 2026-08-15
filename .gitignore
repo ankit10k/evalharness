@@ -1,4 +1,4 @@
-# evalharness state — always local, never committed
+# evalharness state - always local, never committed
 .evalharness/
 
 # Local MCP config generated from .mcp.json.template (contains machine paths)

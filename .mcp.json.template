@@ -9,7 +9,7 @@
     "  <ABSOLUTE_PATH_TO_YOUR_REPO>    the repo whose work you want to capture,",
     "                                  e.g. /home/you/work/my-rtl-project",
     "",
-    "Both must be ABSOLUTE paths — the agent launches the server with an",
+    "Both must be ABSOLUTE paths - the agent launches the server with an",
     "unpredictable working directory. EVALHARNESS_REPO is what tells the server",
     "which repo's .evalharness/ directory to read and write.",
     "",
