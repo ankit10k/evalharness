@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Copy this file to `.mcp.json` in the ROOT OF THE REPO YOU WANT TO TRACK",
+    "(not in the evalharness folder), then replace the two placeholders below.",
+    "Delete this _comment key if your agent is strict about unknown fields.",
+    "",
+    "  <ABSOLUTE_PATH_TO_EVALHARNESS>  the folder you cloned this repo into,",
+    "                                  e.g. /home/you/tools/evalharness",
+    "  <ABSOLUTE_PATH_TO_YOUR_REPO>    the repo whose work you want to capture,",
+    "                                  e.g. /home/you/work/my-rtl-project",
+    "",
+    "Both must be ABSOLUTE paths — the agent launches the server with an",
+    "unpredictable working directory. EVALHARNESS_REPO is what tells the server",
+    "which repo's .evalharness/ directory to read and write.",
+    "",
+    "The optional env vars below can be deleted if you don't use them:",
+    "  CVDP_DATASET            default path for `import_cvdp` (you supply this file)",
+    "  CVDP_BASELINE_MANIFEST  default path for `import_baseline` FINAL_MANIFEST.json",
+    "  EVALHARNESS_PET_NAME    rename the persona (default: EvalScout)",
+    "  EVALHARNESS_PET_ICON    change the persona icon (default: [*_*] style face)"
+  ],
+  "mcpServers": {
+    "evalharness": {
+      "command": "python3",
+      "args": [
+        "<ABSOLUTE_PATH_TO_EVALHARNESS>/mcp_server.py"
+      ],
+      "env": {
+        "EVALHARNESS_REPO": "<ABSOLUTE_PATH_TO_YOUR_REPO>",
+        "CVDP_DATASET": "",
+        "CVDP_BASELINE_MANIFEST": "",
+        "EVALHARNESS_PET_NAME": "EvalScout"
+      }
+    }
+  }
+}
