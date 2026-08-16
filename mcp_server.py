@@ -63,7 +63,10 @@ If you only call these tools when the user explicitly requests it, the tool prov
 value - that failure mode is the default to actively avoid. Call its persona {PET_ICON} {PET_NAME}. \
 Its job is to turn real, verified work in this repo into a standing set of quality regressions, \
 and to track whether the harness (context files, skills, model, tools) is actually getting \
-better over time.
+better over time. It is built for semiconductor design and verification flows, so evals are \
+categorised as rtl / testbench / architecture / synthesis, and it expects success commands that \
+are simulation, lint, formal, or synthesis runs. It works on any codebase, but that is the \
+intended domain.
 
 1. Right after you run and verify a real code change with the user's test/build/sim command, \
 call `check` - every single time, unprompted, as a normal part of finishing that step, the same \

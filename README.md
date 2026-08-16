@@ -2,10 +2,17 @@
 
 **Measure whether your AI coding setup is actually getting better.**
 
+**Built for semiconductor design and verification teams.** RTL, testbenches,
+architecture, and synthesis, with your own simulator and your own flow.
+
 `[•_•] EvalScout`
 
 Stdlib-only Python. No dependencies, no server, no account, no network calls.
-Everything stays on your machine.
+Your RTL never leaves your machine.
+
+> Nothing here is hardware-only at the mechanical level, so it works on any
+> codebase. The defaults, eval categories, benchmark integrations, and design
+> decisions are aimed squarely at silicon teams.
 
 ---
 
@@ -13,6 +20,7 @@ Everything stays on your machine.
 
 - [What is this?](#what-is-this)
 - [Why you need it](#why-you-need-it)
+- [**Built for silicon flows**](#built-for-silicon-flows)
 - [How it works](#how-it-works)
 - [**Two ways to use it**](#two-ways-to-use-it)
 - [Requirements](#requirements)
@@ -30,17 +38,21 @@ Everything stays on your machine.
 
 ## What is this?
 
-You use an AI coding agent (Claude Code, Cursor, Codex, or similar). Over time
-you tune how it works: you write a `CLAUDE.md`, add skill documents, connect
-MCP tools, switch models. All of that together is what we call your **harness**.
+Your team uses an AI coding agent (Claude Code, Cursor, Codex, or similar) on
+RTL, testbenches, and debug. Over time you tune how it works: you write a
+`CLAUDE.md` describing your clocking conventions, add a skill document for
+your AXI rules, connect an EDA MCP server, switch models. All of that together
+is what we call your **harness**.
 
 Here is the problem: you have no idea whether any of it helps.
 
-You add a document explaining your codebase conventions. Does the agent
-actually produce better code now? You switch models. Better or worse? You
-connect a new tool. Did that move the needle, or just add noise?
+You write a document explaining your reset methodology. Does the agent
+actually produce better RTL now? You switch models. Better or worse on
+constrained-random testbenches? You connect a lint tool. Did that move the
+needle, or just add noise?
 
-Most people answer this with vibes. Semiflow EvalBench answers it with a number.
+Most teams answer this with vibes. Semiflow EvalBench answers it with a number,
+measured on your own designs, inside your own environment.
 
 It works in two steps:
 
@@ -64,20 +76,58 @@ work you were already doing.
 guesswork without measurement. A document that feels helpful may do nothing.
 A change that seems minor may help a lot. You cannot tell without evidence.
 
-**Your data never leaves your machine.** If you work on proprietary RTL, source
-code, or anything under NDA, you cannot upload it to a benchmarking service.
-Semiflow EvalBench runs entirely locally, makes zero network calls, and stores
-everything in a `.evalbench/` folder inside your own repo.
+**Your RTL never leaves your machine.** Proprietary designs, customer IP, and
+anything under NDA cannot be uploaded to a cloud benchmarking service. For most
+semiconductor teams that rules out every hosted option. Semiflow EvalBench runs
+entirely locally, makes zero network calls, and stores everything in a
+`.evalbench/` folder inside your own repo. It works on an air-gapped
+workstation.
 
-**It works with any toolchain.** Semiflow EvalBench has no idea what a simulator is.
-You give it a shell command that proves your work is correct. That can be
-`make test`, `pytest`, `iverilog ... && vvp ...`, Verilator, a Synopsys or
-Cadence flow script, or anything else. If it exits `0`, it passed.
+**It fits your existing flow.** No new simulator, no new methodology, no change
+to how your team works. You give it the shell command you already use to sign
+off on a change: a `make regression`, an `iverilog`/`vvp` run, Verilator, a
+VCS/Xcelium script, a cocotb suite, a formal proof, or a synthesis check. If it
+exits `0`, it passed.
 
-**It catches overfitting.** Tune your context files enough and you will make
-them fit your own repo's quirks rather than making the agent genuinely better.
-Semiflow EvalBench tracks your own evals and public benchmark problems as two separate
-scores, so you can see when one improves while the other does not.
+**It runs where your tools run.** Python standard library only, no pip install,
+Python 3.9 compatible. That matters on locked-down EDA workstations where you
+cannot freely install packages.
+
+**It catches overfitting.** Tune your context files enough and you will fit them
+to one block's quirks rather than making the agent genuinely better at your
+designs. Semiflow EvalBench tracks your own evals and public hardware benchmark
+problems as two separate scores, so you can see when one improves and the other
+does not.
+
+---
+
+## Built for silicon flows
+
+Concretely, not just in positioning:
+
+**Evals are categorised by design activity.** Every eval is typed as
+`rtl`, `testbench`, `architecture`, `synthesis`, or `other`, inferred from the
+files you touched and correctable by hand. Your score breaks down by category,
+so "the agent got better at testbenches but worse at synthesis constraints" is
+something you can actually see.
+
+**Hardware benchmarks are first-class.** Built-in support for NVIDIA's
+[CVDP](#cvdp-benchmark-support) benchmark (RTL design, testbench authoring, and
+debug problems) as a public calibration point next to your private evals, plus
+an importer for [SiliconCrew](#siliconcrew-integration) results.
+
+**Optional EDA tool integration.** If you run an RTL/DV MCP server alongside it
+(for example SiliconCrew's `rtl-codex`, which exposes lint, simulation, and
+formal), the agent is prompted to run those checks before an eval is approved,
+and the results are recorded on the eval as `supplementary_checks`.
+
+**Designed around long verification loops.** Attempts run in isolated git
+worktrees, so a multi-minute regression runs against a clean checkout without
+disturbing your working tree.
+
+**The pilot design.** This was built and dogfooded against an AI-generated L1
+data cache: RTL, three testbenches, SDC constraints, and a Sky130 synthesis
+flow.
 
 ---
 
@@ -304,8 +354,8 @@ It asks four questions:
 
 | Question | What to answer | Example |
 |---|---|---|
-| Success command | The command that proves your work is correct | `make test` |
-| Context globs | Files that make up your harness | `CLAUDE.md,skills/**` |
+| Success command | The command you already use to sign off a change | `make regression TEST=fifo` |
+| Context globs | Files that make up your harness | `CLAUDE.md,skills/**,docs/methodology.md` |
 | Model | Which model you use | `claude-sonnet-5` |
 | Tools | MCP servers or tools available to your agent | `rtl-codex` |
 
@@ -323,7 +373,7 @@ When you would normally run your test to confirm the work, run it through
 `check` instead:
 
 ```bash
-evalbench check "make test" --prompt "Fix the FIFO overflow when depth is 1"
+evalbench check "make regression TEST=fifo" --prompt "Fix the FIFO overflow when depth is 1"
 ```
 
 `check` runs your command, notices you changed real code, and proposes an eval:
@@ -331,7 +381,7 @@ evalbench check "make test" --prompt "Fix the FIFO overflow when depth is 1"
 ```
 eval_a1b2c3d4  [rtl]  Fix FIFO overflow (rtl/fifo.sv)
   rtl/fifo.sv  (+4/-2)  commit 8a31f2c9de
-  success: make test
+  success: make regression TEST=fifo
   prompt: Fix the FIFO overflow when depth is 1
   [a]pprove / [e]dit / [r]eject / [t]ag / [p]rompt / [c]omment / [y]pe / [d]iff / [s]kip?
 ```
@@ -572,12 +622,16 @@ No. Core functionality makes zero network calls. There is no telemetry, no
 analytics, and no update check. Everything lives in `.evalbench/` inside your
 repo, which the tool adds to your `.gitignore` automatically.
 
-**Does this work for software, or only hardware?**
+**Is this only for semiconductor work?**
 
-Any codebase. The tool has no hardware-specific logic. The success command is
-just a shell command, so `pytest`, `npm test`, `cargo test`, and `make` all
-work. Hardware terminology appears in the eval type labels (`rtl`,
-`testbench`, `synthesis`), which is cosmetic.
+It is built and tuned for it. The eval categories (`rtl`, `testbench`,
+`architecture`, `synthesis`), the CVDP and SiliconCrew integrations, and the
+no-dependency, air-gapped design all target silicon teams.
+
+That said, nothing in the mechanism is hardware-specific. The success command
+is just a shell command, so `pytest`, `npm test`, or `cargo test` work fine if
+you point it at a software repo. You would simply not use the hardware-specific
+parts.
 
 **Does it need an API key?**
 
@@ -613,8 +667,9 @@ with none at all.
 **What if my project has no tests?**
 
 You need some command that distinguishes working code from broken code. It does
-not have to be a formal test suite. A build that fails on error, a linter, or a
-script that greps for expected output all work.
+not have to be a full regression suite. A lint run that fails on error, an
+elaboration or compile step, a single directed test, a formal property check, or
+a script that greps a simulation log for `TEST PASSED` all work.
 
 **Can my whole team share one set of evals?**
 

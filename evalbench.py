@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""evalbench - minimal local eval harness for hardware coding agents.
+"""Semiflow EvalBench - measure whether an AI coding harness is improving.
 
-Stdlib only. Runs entirely on local files under .evalbench/ inside
-whatever repo you invoke it from. No server, no network calls, no
-assumptions about which simulator/EDA tool/agent you're using - the
+Built for semiconductor design and verification flows: RTL, testbenches,
+architecture, and synthesis. The eval categories, the CVDP benchmark importer,
+and the SiliconCrew adapter all target silicon teams, though nothing in the
+mechanism itself is hardware-specific.
+
+Stdlib only and Python 3.9 compatible, so it runs on locked-down EDA
+workstations where you cannot pip install. Runs entirely on local files under
+.evalbench/ inside whatever repo you invoke it from. No server, no network
+calls, no assumptions about which simulator/EDA tool/agent you're using - the
 success command is always yours.
 """
 from __future__ import annotations
@@ -2012,7 +2018,7 @@ def cmd_feedback(args) -> int:
 # ------------------------------------------------------------------- CLI
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="evalbench", description="Semiflow EvalBench: measure whether your AI coding setup is actually improving.")
+    p = argparse.ArgumentParser(prog="evalbench", description="Semiflow EvalBench: measure whether your AI coding setup is actually improving. Built for semiconductor design and verification flows.")
     sub = p.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Scaffold .evalbench/config.json in the current repo.")
